@@ -6,12 +6,14 @@ import Image from "next/image"
 import { Spotlight } from "@/components/ui/spotlight-new"
 import { QRCodeSVG } from "qrcode.react"
 import { useAutoSync } from "@/hooks/useAutoSync"
+import { UploadDialog } from "@/components/upload-dialog"
 
 export default function HomePage() {
   const [codigo, setCodigo] = useState("")
   const [error, setError] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [qrValue, setQrValue] = useState("https://bluekaraoke.com")
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const router = useRouter()
   
   // Sincronização automática desabilitada em desenvolvimento
@@ -73,13 +75,14 @@ export default function HomePage() {
         setError(false)
         e.preventDefault()
       }
-      // Asterisk (*) to check for new music
       else if (e.key === "*") {
-        // Trigger manual check via custom event
         window.dispatchEvent(new CustomEvent("checkNewMusic"))
         e.preventDefault()
       }
-      // Block all other keys
+      else if (e.key === "/") {
+        setUploadDialogOpen(true)
+        e.preventDefault()
+      }
       else {
         e.preventDefault()
       }
@@ -179,6 +182,8 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      <UploadDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} />
     </main>
   )
 }

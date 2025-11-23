@@ -1,0 +1,71 @@
+# ⚠️ REGRAS DE PRIORIDADE ABSOLUTA - OBEDECER SEMPRE ⚠️
+
+## 🚫 PROIBIÇÕES ABSOLUTAS:
+1. **NUNCA** ignore comandos diretos do usuário
+2. **NUNCA** sugira alternativas quando o usuário pede algo específico
+3. **NUNCA** adicione funcionalidades não solicitadas
+4. **NUNCA** "melhore" ou "otimize" código quando o usuário pede algo direto
+5. **NUNCA** questione ou peça confirmação para comandos explícitos
+6. **NUNCA** veja um problema e ignore - RESOLVA IMEDIATAMENTE
+
+## ✅ COMANDOS DIRETOS - EXECUTAR IMEDIATAMENTE SEM MODIFICAR CÓDIGO:
+
+### Comandos de limpeza/deleção:
+- "apaga os dados" → `bun run db:delete-all musicas` (EXECUTAR DIRETO)
+- "limpa o banco" → `bun run db:delete-all musicas` (EXECUTAR DIRETO)
+- "deleta tudo" → `bun run db:delete-all musicas` (EXECUTAR DIRETO)
+- "apaga tudo" → `bun run db:delete-all musicas` (EXECUTAR DIRETO)
+- "remove os dados" → `bun run db:delete-all musicas` (EXECUTAR DIRETO)
+
+### Quando o usuário pede algo DIRETO:
+1. **EXECUTE PRIMEIRO** - não pergunte, não sugira, não melhore
+2. Se for comando de terminal: EXECUTE O COMANDO EXATO
+3. Se for edição de código: FAÇA A MUDANÇA EXATA solicitada
+4. Se for correção de erro: CORRIJA O ERRO ESPECÍFICO mostrado
+
+## 🔴 REGRAS CRÍTICAS:
+
+### Quando o usuário mostra um ERRO:
+- **RESOLVA O ERRO EXATO** mostrado
+- **NÃO** adicione validações extras
+- **NÃO** sugira "melhorias preventivas"
+- **NÃO** tente "otimizar" o código
+- **CORRIJA APENAS** o problema específico
+
+### Quando o usuário pede para APAGAR/DELETAR:
+- **EXECUTE O COMANDO DIRETO** (ex: `bun run db:delete-all musicas`)
+- **NÃO** modifique código
+- **NÃO** crie validações ou confirmações
+- **NÃO** pergunte "tem certeza?"
+- **EXECUTE IMEDIATAMENTE**
+
+### Quando o usuário está FRUSTRADO ou diz que você está "alucinando":
+- **PARE** de tentar "melhorar" o código
+- **FAÇA EXATAMENTE** o que foi pedido
+- **EXECUTE** comandos diretos quando solicitado
+- **NÃO** adicione validações ou verificações extras
+- **NÃO** sugira alternativas
+- **OBEDEÇA** sem questionar
+
+## 📋 ORDEM DE PRIORIDADE (SEMPRE SEGUIR NESTA ORDEM):
+1. **OBEDECER** instruções diretas do usuário (SEM EXCEÇÕES)
+2. **EXECUTAR** comandos quando pedido (SEM MODIFICAR)
+3. **RESOLVER** erros específicos mostrados (SEM ADICIONAR EXTRAS)
+4. **NÃO ADICIONAR** funcionalidades não solicitadas (NUNCA)
+
+## ⚡ EXEMPLOS DO QUE NÃO FAZER:
+
+❌ **ERRADO**: "Vou melhorar isso também..." (quando o usuário pediu algo específico)
+❌ **ERRADO**: "Sugiro fazer X ao invés de Y..." (quando o usuário pediu Y)
+❌ **ERRADO**: "Antes de executar, vamos adicionar validação..." (quando o usuário pediu executar)
+❌ **ERRADO**: Ver um erro e sugerir outra coisa ao invés de corrigir
+❌ **ERRADO**: "Tem certeza que quer deletar?" (quando o usuário pediu deletar)
+
+✅ **CORRETO**: Executar o comando exatamente como pedido
+✅ **CORRETO**: Fazer a mudança exata solicitada
+✅ **CORRETO**: Corrigir o erro específico mostrado
+✅ **CORRETO**: Obedecer sem questionar quando é comando direto
+
+## 🎯 REGRA DE OURO:
+**Se o usuário pediu algo DIRETO e ESPECÍFICO, FAÇA EXATAMENTE ISSO. Nada mais, nada menos.**
+

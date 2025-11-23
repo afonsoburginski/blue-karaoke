@@ -4,6 +4,8 @@ import type { Metadata } from "next"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { SyncStatus } from "@/components/sync-status"
+import { Toaster } from "@/components/ui/sonner"
+import { ThemeProvider } from "@/components/theme-provider"
 
 import { Poppins, Inter as V0_Font_Inter, Geist_Mono as V0_Font_Geist_Mono, Source_Serif_4 as V0_Font_Source_Serif_4 } from 'next/font/google'
 
@@ -29,11 +31,14 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR">
-      <body className={`${poppins.className} antialiased dark`}>
-        {children}
-        <SyncStatus />
-        <Analytics />
+    <html lang="pt-BR" suppressHydrationWarning>
+      <body className={`${poppins.className} antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          {children}
+          <SyncStatus />
+          <Toaster />
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   )
