@@ -7,7 +7,7 @@
 
 import { db } from "./index"
 import { users, musicas, historico, estatisticas } from "./schema"
-import { eq, desc, count, sql } from "drizzle-orm"
+import { eq, desc, count, sql, and } from "drizzle-orm"
 
 // ============================================
 // EXEMPLOS DE USUÁRIOS
@@ -237,8 +237,10 @@ export async function getEstatisticasMes(userId: string, mesReferencia: string) 
     .select()
     .from(estatisticas)
     .where(
-      eq(estatisticas.userId, userId),
-      eq(estatisticas.mesReferencia, mesReferencia)
+      and(
+        eq(estatisticas.userId, userId),
+        eq(estatisticas.mesReferencia, mesReferencia)
+      )
     )
     .limit(1)
 
