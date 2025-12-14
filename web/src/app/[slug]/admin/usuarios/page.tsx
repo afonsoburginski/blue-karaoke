@@ -1,0 +1,363 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter, useParams } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
+import {
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
+import { DashboardSidebar } from "@/components/dashboard-sidebar"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Plus, Users, Mail, Calendar, CreditCard } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+
+interface Usuario {
+  id: string
+  slug: string
+  name: string
+  email: string
+  avatar?: string | null
+  role: string
+  userType: string
+  isActive: boolean
+  createdAt: string
+  assinatura?: {
+    plano: string
+    status: string
+    dataFim: string
+    valor: number
+  } | null
+}
+
+export default function AdminUsuariosPage() {
+  const router = useRouter()
+  const params = useParams()
+  const { user, isLoading: authLoading } = useAuth()
+  const [slug, setSlug] = useState<string | null>(null)
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [tipoFilter, setTipoFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    userType: "subscriber",
+    role: "user",
+  })
+
+  useEffect(() => {
+    async function unwrapParams() {
+      const { slug: slugValue } = await params
+      setSlug(slugValue as string)
+    }
+    unwrapParams()
+  }, [params])
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login")
+      return
+    }
+
+    if (user && user.role !== "admin") {
+      router.push(`/${user.slug}`)
+      return
+    }
+
+    if (user && slug) {
+      fetchUsuarios()
+    }
+  }, [user, slug, authLoading, router, tipoFilter, statusFilter])
+
+  const fetchUsuarios = async () => {
+    try {
+      setIsLoading(true)
+      const params = new URLSearchParams()
+      if (tipoFilter !== "all") params.append("tipo", tipoFilter)
+      if (statusFilter !== "all") params.append("status", statusFilter)
+
+      const response = await fetch(`/api/admin/usuarios?${params.toString()}`)
+      if (response.ok) {
+        const data = await response.json()
+        setUsuarios(data.usuarios || [])
+      }
+    } catch (error) {
+      console.error("Erro ao buscar usuários:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const response = await fetch("/api/admin/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        alert(data.error || "Erro ao criar usuário")
+        return
+      }
+
+      setDialogOpen(false)
+      setFormData({
+        name: "",
+        email: "",
+        password: "",
+        userType: "subscriber",
+        role: "user",
+      })
+      fetchUsuarios()
+    } catch (error) {
+      console.error("Erro ao criar usuário:", error)
+      alert("Erro ao criar usuário")
+    }
+  }
+
+  if (authLoading || isLoading || !user || !slug || user.role !== "admin") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground text-xl">Carregando...</div>
+      </div>
+    )
+  }
+
+  return (
+    <SidebarProvider>
+      <DashboardSidebar
+        userName={user.name}
+        userEmail={user.email}
+        slug={slug}
+        userRole={user.role}
+      />
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold">Gerenciar Usuários</h1>
+          </div>
+        </header>
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Usuários do Sistema</CardTitle>
+                <CardDescription>
+                  Gerencie todos os usuários, assinantes e máquinas
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Select value={tipoFilter} onValueChange={setTipoFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os tipos</SelectItem>
+                    <SelectItem value="subscriber">Assinantes</SelectItem>
+                    <SelectItem value="machine">Máquinas</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Ativos</SelectItem>
+                    <SelectItem value="inactive">Inativos</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Criar Usuário
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Criar Novo Usuário</DialogTitle>
+                      <DialogDescription>
+                        Crie um novo usuário ou máquina física
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleCreateUser} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Nome</Label>
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) =>
+                            setFormData({ ...formData, name: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) =>
+                            setFormData({ ...formData, email: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="password">Senha</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              password: e.target.value,
+                            })
+                          }
+                          required
+                          minLength={6}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="userType">Tipo</Label>
+                        <Select
+                          value={formData.userType}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, userType: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="subscriber">Assinante</SelectItem>
+                            <SelectItem value="machine">Máquina Física</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button type="submit" className="w-full">
+                        Criar Usuário
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Assinatura</TableHead>
+                    <TableHead>Cadastrado em</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {usuarios.length > 0 ? (
+                    usuarios.map((usuario) => (
+                      <TableRow key={usuario.id}>
+                        <TableCell className="font-medium">
+                          {usuario.name}
+                        </TableCell>
+                        <TableCell>{usuario.email}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              usuario.userType === "machine"
+                                ? "secondary"
+                                : "default"
+                            }
+                          >
+                            {usuario.userType === "machine"
+                              ? "Máquina"
+                              : "Assinante"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={usuario.isActive ? "default" : "destructive"}
+                          >
+                            {usuario.isActive ? "Ativo" : "Inativo"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {usuario.assinatura ? (
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline">
+                                {usuario.assinatura.plano}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(
+                                  usuario.assinatura.dataFim
+                                ).toLocaleDateString("pt-BR")}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(usuario.createdAt).toLocaleDateString(
+                            "pt-BR"
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">
+                        Nenhum usuário encontrado
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  )
+}
+
