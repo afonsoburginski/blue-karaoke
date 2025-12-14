@@ -221,7 +221,7 @@ export default function DashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {topMusics.length > 0 ? (
+                    {topMusics && topMusics.length > 0 ? (
                       topMusics.map((music) => (
                         <TableRow key={music.codigo}>
                           <TableCell className="font-medium">{music.rank}</TableCell>
