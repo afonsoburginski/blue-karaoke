@@ -10,7 +10,21 @@ export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser()
 
-    if (!currentUser || currentUser.role !== "admin") {
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: "Não autenticado" },
+        { status: 401 }
+      )
+    }
+
+    // Buscar usuário completo para verificar role
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.userId))
+      .limit(1)
+
+    if (!user || user.role !== "admin") {
       return NextResponse.json(
         { error: "Acesso negado. Apenas administradores." },
         { status: 403 }
