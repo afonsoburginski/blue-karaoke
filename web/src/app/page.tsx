@@ -20,7 +20,6 @@ export default function Home() {
         <TermsCard />
       </div>
 
-      {/* Watermark */}
       <div className="absolute bottom-4 right-4 z-10 text-xs text-white/80">BLUE KARAOKÊS</div>
     </main>
   )
