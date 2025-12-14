@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db, musicas } from "@/lib/db"
+import { db, musicas, users } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { eq, desc } from "drizzle-orm"
 
@@ -14,19 +14,32 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Buscar usuário completo para verificar role
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.userId))
+      .limit(1)
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Usuário não encontrado" },
+        { status: 404 }
+      )
+    }
+
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get("userId")
 
-    let query = db.select().from(musicas)
+    // Determinar qual userId usar
+    const targetUserId = user.role === "admin" && userId ? userId : currentUser.userId
 
-    // Se for admin, pode ver todas. Se não, só as suas
-    if (currentUser.role !== "admin" || !userId) {
-      query = query.where(eq(musicas.userId, currentUser.userId))
-    } else if (userId) {
-      query = query.where(eq(musicas.userId, userId))
-    }
-
-    const allMusicas = await query.orderBy(desc(musicas.createdAt))
+    // Construir query completa de uma vez
+    const allMusicas = await db
+      .select()
+      .from(musicas)
+      .where(eq(musicas.userId, targetUserId))
+      .orderBy(desc(musicas.createdAt))
 
     return NextResponse.json({ musicas: allMusicas })
   } catch (error) {

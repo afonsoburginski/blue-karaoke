@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db, musicas } from "@/lib/db"
+import { db, musicas, users } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { eq } from "drizzle-orm"
 
@@ -19,6 +19,20 @@ export async function DELETE(
 
     const { id } = await params
 
+    // Buscar usuário completo para verificar role
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.userId))
+      .limit(1)
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Usuário não encontrado" },
+        { status: 404 }
+      )
+    }
+
     // Buscar música
     const [musica] = await db
       .select()
@@ -34,7 +48,7 @@ export async function DELETE(
     }
 
     // Verificar permissão (admin ou dono)
-    if (currentUser.role !== "admin" && musica.userId !== currentUser.userId) {
+    if (user.role !== "admin" && musica.userId !== currentUser.userId) {
       return NextResponse.json(
         { error: "Sem permissão" },
         { status: 403 }
