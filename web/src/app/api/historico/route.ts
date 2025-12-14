@@ -18,7 +18,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50")
     const filter = searchParams.get("filter") // today, week, month, all
 
-    let query = db
+    // Build where conditions
+    const whereConditions = [eq(historico.userId, currentUser.userId)]
+
+    // Note: Date filtering is done client-side below since Drizzle doesn't have direct date comparison support
+    // The where clause only filters by userId
+
+    const query = db
       .select({
         id: historico.id,
         userId: historico.userId,
@@ -33,35 +39,7 @@ export async function GET(request: NextRequest) {
       })
       .from(historico)
       .leftJoin(musicas, eq(historico.musicaId, musicas.id))
-      .where(eq(historico.userId, currentUser.userId))
-
-    // Aplicar filtros de data
-    if (filter && filter !== "all") {
-      const now = new Date()
-      let startDate: Date
-
-      switch (filter) {
-        case "today":
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-          break
-        case "week":
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          break
-        case "month":
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-          break
-        default:
-          startDate = new Date(0)
-      }
-
-      query = query.where(
-        and(
-          eq(historico.userId, currentUser.userId),
-          // Note: Drizzle não tem suporte direto para comparação de datas
-          // Isso seria melhor feito com SQL raw ou no cliente
-        )
-      ) as any
-    }
+      .where(and(...whereConditions))
 
     const history = await query.orderBy(desc(historico.dataExecucao)).limit(limit)
 
