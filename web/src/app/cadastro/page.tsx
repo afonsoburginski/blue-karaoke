@@ -46,15 +46,10 @@ export default function CadastroPage() {
     setIsLoading(true)
 
     try {
-      // Gerar username do nome
-      const username = createSlug(formData.name)
-
       const { data, error: authError } = await authClient.signUp.email({
         email: formData.email,
         password: formData.password,
         name: formData.name,
-        username: username,
-        displayUsername: formData.name,
       })
 
       if (authError) {
