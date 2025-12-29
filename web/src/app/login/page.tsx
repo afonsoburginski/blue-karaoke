@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { Header } from "@/components/header"
 import { authClient } from "@/lib/auth-client"
 import { createSlug } from "@/lib/slug"
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
@@ -186,6 +186,22 @@ export default function LoginPage() {
         </Card>
       </div>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Carregando...</CardTitle>
+          </CardHeader>
+        </Card>
+      </main>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
 

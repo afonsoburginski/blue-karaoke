@@ -6,10 +6,6 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Ignorar erros de ESLint durante o build
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // Configurações de ambiente
   env: {
     DATABASE_URL: env.DATABASE_URL,

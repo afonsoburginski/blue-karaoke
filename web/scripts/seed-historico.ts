@@ -2,6 +2,7 @@ import * as dotenv from "dotenv"
 import path from "path"
 import { db, historico, musicas, users } from "../src/lib/db"
 import { eq, desc, sql, count } from "drizzle-orm"
+import type { NewHistorico } from "@/lib/db/schema"
 
 dotenv.config({ path: path.join(process.cwd(), ".env.local") })
 
@@ -38,7 +39,7 @@ async function seedHistorico() {
 
     // Criar histórico de reproduções para as últimas 2 semanas
     const now = new Date()
-    const historicosParaCriar = []
+    const historicosParaCriar: NewHistorico[] = []
 
     // Criar reproduções variadas ao longo dos últimos 14 dias
     for (let day = 0; day < 14; day++) {

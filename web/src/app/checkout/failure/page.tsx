@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 // Verificar se está em modo de desenvolvimento usando variável de ambiente
 const isDevelopment = process.env.NEXT_PUBLIC_NODE_ENV === "development"
 
-export default function CheckoutFailurePage() {
+function CheckoutFailureContent() {
   const searchParams = useSearchParams()
   const paymentId = searchParams.get("payment_id")
   const status = searchParams.get("status")
@@ -109,6 +110,22 @@ export default function CheckoutFailurePage() {
         </CardContent>
       </Card>
     </main>
+  )
+}
+
+export default function CheckoutFailurePage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Carregando...</CardTitle>
+          </CardHeader>
+        </Card>
+      </main>
+    }>
+      <CheckoutFailureContent />
+    </Suspense>
   )
 }
 

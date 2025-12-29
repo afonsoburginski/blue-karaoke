@@ -1,8 +1,8 @@
 import path from "path"
 import * as dotenv from "dotenv"
 import { eq } from "drizzle-orm"
-import { db, musicas } from "@/lib/db"
-import { r2Client, R2_BUCKET, getR2Key, R2_PUBLIC_URL } from "@/lib/r2"
+import { db, musicas } from "../src/lib/db"
+import { r2Client, R2_BUCKET, getR2Key, R2_PUBLIC_URL } from "../src/lib/r2"
 import { HeadObjectCommand } from "@aws-sdk/client-s3"
 import getVideoDuration from "get-video-duration"
 
