@@ -88,8 +88,7 @@ export async function POST(request: NextRequest) {
               userId: chaveData.userId,
               musicaId: musica.id,
               codigo: item.codigo,
-              nota: item.nota || 0,
-              dataExecucao: new Date(item.dataExecucao),
+              dataExecucao: item.dataExecucao ? new Date(item.dataExecucao) : new Date(),
             })
           }
         }
