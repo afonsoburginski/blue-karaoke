@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db, users, assinaturas } from "@/lib/db"
+import { db, users, assinaturas, account } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { eq, desc, and, or } from "drizzle-orm"
 import { hashPassword } from "@/lib/auth"
 import { createSlug } from "@/lib/slug"
+import { createId } from "@paralleldrive/cuid2"
 
 // Listar todos os usuários (apenas admin)
 export async function GET(request: NextRequest) {
@@ -160,22 +161,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Gerar ID único (CUID)
+    const userId = createId()
+
     // Hash da senha
     const hashedPassword = await hashPassword(password)
 
-    // Criar usuário
+    // Criar usuário (sem password - será criado na tabela account)
     const [newUser] = await db
       .insert(users)
       .values({
+        id: userId,
         slug,
         name,
         email,
-        password: hashedPassword,
+        emailVerified: false,
         role: role || "user",
         userType: userType || "subscriber",
         isActive: true,
       })
       .returning()
+
+    // Criar conta com senha no Better Auth
+    await db
+      .insert(account)
+      .values({
+        id: createId(),
+        accountId: email,
+        providerId: "credential",
+        userId: userId,
+        password: hashedPassword,
+      })
 
     return NextResponse.json(
       {
