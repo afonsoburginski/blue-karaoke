@@ -16,6 +16,11 @@ async function setupDatabase() {
   console.log("🚀 Testando conexão com o banco de dados...")
   
   // Verificar se é Supabase (não precisa criar banco)
+  if (!connectionString) {
+    console.error("❌ DATABASE_URL ou DIRECT_URL não está definida")
+    process.exit(1)
+  }
+  
   const isSupabase = connectionString.includes("supabase.co") || connectionString.includes("pooler.supabase.com")
   
   if (isSupabase) {
