@@ -82,10 +82,22 @@ export const auth = betterAuth({
     },
   },
   trustedOrigins: [
+    // Origem configurada manualmente
     env.CORS_ORIGIN || "http://localhost:3000",
-  ],
+    // Domínios de produção
+    "https://www.bluekaraokes.com.br",
+    "https://bluekaraokes.com.br",
+    // Localhost para desenvolvimento
+    "http://localhost:3000",
+    // Vercel preview deployments
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+    // Next.js public URL se disponível
+    ...(process.env.NEXT_PUBLIC_APP_URL ? [process.env.NEXT_PUBLIC_APP_URL] : []),
+  ].filter(Boolean) as string[],
   secret: env.JWT_SECRET,
-  baseURL: env.CORS_ORIGIN || "http://localhost:3000",
+  baseURL: env.CORS_ORIGIN || 
+    process.env.NEXT_PUBLIC_APP_URL || 
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"),
   basePath: "/api/auth",
 })
 
