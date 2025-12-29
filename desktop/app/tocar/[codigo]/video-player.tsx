@@ -23,22 +23,33 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
   }, [])
 
   const handleVideoEnd = useCallback(async () => {
-    const nota = Math.floor(Math.random() * 41) + 60
-
     try {
+      // Buscar musicaId se disponível
+      let musicaId: string | undefined
+      try {
+        const musicaResponse = await fetch(`/api/musicas?codigo=${musica.codigo}`)
+        if (musicaResponse.ok) {
+          const musicaData = await musicaResponse.json()
+          musicaId = musicaData.id
+        }
+      } catch (error) {
+        console.error("Erro ao buscar musicaId:", error)
+      }
+
+      // Salvar histórico (salva localmente primeiro, sincroniza depois)
       await fetch("/api/historico", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           codigo: musica.codigo,
-          nota,
+          musicaId,
         }),
       })
 
-      router.push(`/nota?codigo=${musica.codigo}&nota=${nota}`)
+      router.push(`/tocar/${musica.codigo}/finalizado`)
     } catch (error) {
       console.error("[v0] Error saving historico:", error)
-      router.push(`/nota?codigo=${musica.codigo}&nota=${nota}`)
+      router.push(`/tocar/${musica.codigo}/finalizado`)
     }
   }, [musica.codigo, router])
 

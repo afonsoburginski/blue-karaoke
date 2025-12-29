@@ -10,11 +10,19 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
+} from "@/components/ui/field"
 import {
   User,
   Mail,
@@ -24,7 +32,9 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  Loader2,
 } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -34,12 +44,15 @@ export default function PerfilPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<{
+    newPassword?: string
+    confirmPassword?: string
+  }>({})
 
   // Estados do formulário
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   })
@@ -69,7 +82,6 @@ export default function PerfilPage() {
       setFormData({
         name: user.name,
         email: user.email,
-        currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       })
@@ -122,6 +134,14 @@ export default function PerfilPage() {
       ...prev,
       [name]: value,
     }))
+    
+    // Limpar erros ao digitar
+    if (name === "newPassword" || name === "confirmPassword") {
+      setFieldErrors((prev) => ({
+        ...prev,
+        [name]: undefined,
+      }))
+    }
   }
 
   const handleSaveProfile = async () => {
@@ -131,17 +151,24 @@ export default function PerfilPage() {
 
     try {
       // Validações
-      if (formData.newPassword && formData.newPassword.length < 6) {
-        setErrorMessage("A nova senha deve ter pelo menos 6 caracteres")
+      const errors: typeof fieldErrors = {}
+      
+      if (formData.newPassword) {
+        if (formData.newPassword.length < 6) {
+          errors.newPassword = "A senha deve ter pelo menos 6 caracteres"
+        }
+        if (formData.newPassword !== formData.confirmPassword) {
+          errors.confirmPassword = "As senhas não coincidem"
+        }
+      }
+      
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors)
         setIsLoading(false)
         return
       }
-
-      if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
-        setErrorMessage("As senhas não coincidem")
-        setIsLoading(false)
-        return
-      }
+      
+      setFieldErrors({})
 
       const response = await fetch("/api/users/profile", {
         method: "PUT",
@@ -149,7 +176,6 @@ export default function PerfilPage() {
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
-          currentPassword: formData.currentPassword || undefined,
           newPassword: formData.newPassword || undefined,
           avatar: profileImagePreview || undefined,
         }),
@@ -167,7 +193,6 @@ export default function PerfilPage() {
       setSuccessMessage("Perfil atualizado com sucesso!")
       setFormData((prev) => ({
         ...prev,
-        currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       }))
@@ -203,11 +228,12 @@ export default function PerfilPage() {
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <h1 className="text-lg font-semibold">Perfil</h1>
           </div>
+          <ThemeToggle />
         </header>
-        <div className="flex flex-1 flex-col gap-6 p-6">
+        <div className="flex flex-1 flex-col gap-6 p-6 max-w-4xl mx-auto w-full">
           {/* Mensagens de Sucesso/Erro */}
           {successMessage && (
             <div className="flex items-center gap-2 p-4 rounded-lg border border-green-500/50 bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300">
@@ -226,63 +252,50 @@ export default function PerfilPage() {
           {/* Header do Perfil */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 pb-6 border-b">
             <div className="relative group">
-                  <Avatar className="h-24 w-24 ring-4 ring-background shadow-lg">
-                    {profileImagePreview || user.avatar ? (
-                      <AvatarImage src={profileImagePreview || user.avatar || undefined} alt={user.name || "Usuário"} />
-                    ) : (
-                      <AvatarFallback className="text-3xl font-semibold">{getInitials()}</AvatarFallback>
-                    )}
-                  </Avatar>
+              <Avatar className="h-20 w-20 ring-2 ring-border">
+                {profileImagePreview || user.avatar ? (
+                  <AvatarImage src={profileImagePreview || user.avatar || undefined} alt={user.name || "Usuário"} />
+                ) : (
+                  <AvatarFallback className="text-2xl font-semibold">{getInitials()}</AvatarFallback>
+                )}
+              </Avatar>
               <div
                 {...getRootProps()}
                 className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
               >
                 <input {...getInputProps()} />
-                <Camera className="h-6 w-6 text-white" />
+                <Camera className="h-5 w-5 text-white" />
               </div>
             </div>
             <div className="flex-1">
-              <h2 className="text-3xl font-bold mb-1">{user.name || "Usuário"}</h2>
-              <p className="text-muted-foreground flex items-center gap-2">
+              <h2 className="text-2xl font-semibold mb-1">{user.name || "Usuário"}</h2>
+              <p className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Mail className="h-4 w-4" />
                 {user.email}
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Informações Pessoais */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Informações Pessoais
-                </CardTitle>
-                <CardDescription>
-                  Atualize seu nome e email
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome completo</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          {/* Formulário usando Field components */}
+          <form onSubmit={(e) => { e.preventDefault(); handleSaveProfile(); }}>
+            <FieldGroup>
+              <FieldSet>
+                <FieldLegend>Informações Pessoais</FieldLegend>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="name">Nome</FieldLabel>
                     <Input
                       id="name"
                       name="name"
                       type="text"
-                      placeholder="Seu nome completo"
+                      placeholder="Seu nome"
                       value={formData.name}
                       onChange={handleInputChange}
-                      className="pl-9 h-11"
+                      required
                     />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="email">Email</FieldLabel>
                     <Input
                       id="email"
                       name="email"
@@ -290,157 +303,123 @@ export default function PerfilPage() {
                       placeholder="seu@email.com"
                       value={formData.email}
                       onChange={handleInputChange}
-                      className="pl-9 h-11"
+                      required
                     />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  </Field>
+                </FieldGroup>
+              </FieldSet>
 
-            {/* Alterar Senha */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lock className="h-5 w-5" />
-                  Segurança
-                </CardTitle>
-                <CardDescription>
-                  Altere sua senha de acesso
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword">Senha Atual</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                      id="currentPassword"
-                      name="currentPassword"
-                      type="password"
-                      placeholder="Digite sua senha atual"
-                      value={formData.currentPassword}
-                      onChange={handleInputChange}
-                      className="pl-9 h-11"
-                    />
-                  </div>
-                </div>
+              <FieldSeparator />
 
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword">Nova Senha</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <FieldSet>
+                <FieldLegend>Alterar Senha</FieldLegend>
+                <FieldGroup>
+                  <Field data-invalid={!!fieldErrors.newPassword}>
+                    <FieldLabel htmlFor="newPassword">Nova Senha</FieldLabel>
                     <Input
                       id="newPassword"
                       name="newPassword"
                       type="password"
-                      placeholder="Mínimo 6 caracteres"
+                      placeholder="••••••••"
                       value={formData.newPassword}
                       onChange={handleInputChange}
-                      className="pl-9 h-11"
                       minLength={6}
+                      aria-invalid={!!fieldErrors.newPassword}
                     />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    {fieldErrors.newPassword && (
+                      <FieldError>{fieldErrors.newPassword}</FieldError>
+                    )}
+                  </Field>
+                  <Field data-invalid={!!fieldErrors.confirmPassword}>
+                    <FieldLabel htmlFor="confirmPassword">Confirmar Senha</FieldLabel>
                     <Input
                       id="confirmPassword"
                       name="confirmPassword"
                       type="password"
-                      placeholder="Confirme a nova senha"
+                      placeholder="••••••••"
                       value={formData.confirmPassword}
                       onChange={handleInputChange}
-                      className="pl-9 h-11"
                       minLength={6}
+                      aria-invalid={!!fieldErrors.confirmPassword}
                     />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    {fieldErrors.confirmPassword && (
+                      <FieldError>{fieldErrors.confirmPassword}</FieldError>
+                    )}
+                  </Field>
+                </FieldGroup>
+              </FieldSet>
 
-          {/* Foto de Perfil - Card Separado */}
-          {profileImage && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Camera className="h-5 w-5" />
-                  Preview da Foto
-                </CardTitle>
-                <CardDescription>
-                  Foto selecionada para upload
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage src={profileImagePreview || undefined} alt="Preview" />
-                    <AvatarFallback className="text-xl">{getInitials()}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{profileImage.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(profileImage.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
+              {/* Preview da Foto */}
+              {profileImage && (
+                <>
+                  <FieldSeparator />
+                  <div className="flex items-center gap-4 p-4 border rounded-lg">
+                    <Avatar className="h-16 w-16">
+                      <AvatarImage src={profileImagePreview || undefined} alt="Preview" />
+                      <AvatarFallback className="text-lg">{getInitials()}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{profileImage.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(profileImage.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={removeProfileImage}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={removeProfileImage}
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Remover
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Botão de Salvar */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (user) {
-                  setFormData({
-                    name: user.name,
-                    email: user.email,
-                    currentPassword: "",
-                    newPassword: "",
-                    confirmPassword: "",
-                  })
-                }
-                setProfileImage(null)
-                setProfileImagePreview(null)
-                setErrorMessage("")
-                setSuccessMessage("")
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleSaveProfile}
-              disabled={isLoading}
-              size="lg"
-              className="min-w-[140px]"
-            >
-              {isLoading ? (
-                <>
-                  <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Salvar Alterações
                 </>
               )}
-            </Button>
-          </div>
+
+              <FieldSeparator />
+
+              {/* Botões de Ação */}
+              <Field orientation="horizontal">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    if (user) {
+                      setFormData({
+                        name: user.name,
+                        email: user.email,
+                        newPassword: "",
+                        confirmPassword: "",
+                      })
+                    }
+                    setProfileImage(null)
+                    setProfileImagePreview(null)
+                    setErrorMessage("")
+                    setSuccessMessage("")
+                    setFieldErrors({})
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Salvando
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Salvar
+                    </>
+                  )}
+                </Button>
+              </Field>
+            </FieldGroup>
+          </form>
         </div>
       </SidebarInset>
     </SidebarProvider>

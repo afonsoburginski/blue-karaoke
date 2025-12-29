@@ -36,30 +36,31 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar músicas mais tocadas
-    const topMusics = await db
+    const topMusicsQuery = await db
       .select({
+        musicaId: historico.musicaId,
         codigo: historico.codigo,
-        reproducoes: count(),
-        musica: {
-          titulo: musicas.titulo,
-          artista: musicas.artista,
-        },
+        reproducoes: sql<number>`count(*)::int`.as("reproducoes"),
+        titulo: musicas.titulo,
+        artista: musicas.artista,
       })
       .from(historico)
-      .leftJoin(musicas, eq(historico.codigo, musicas.codigo))
+      .leftJoin(musicas, eq(historico.musicaId, musicas.id))
       .where(sql`${historico.dataExecucao} >= ${startDate.toISOString()}`)
-      .groupBy(historico.codigo, musicas.titulo, musicas.artista)
-      .orderBy(desc(count()))
+      .groupBy(historico.musicaId, historico.codigo, musicas.titulo, musicas.artista)
+      .orderBy(desc(sql`count(*)`))
       .limit(10)
 
+    const topMusics = topMusicsQuery.map((item, index) => ({
+      rank: index + 1,
+      codigo: item.codigo,
+      titulo: item.titulo || "Desconhecida",
+      artista: item.artista || "Desconhecido",
+      reproducoes: Number(item.reproducoes),
+    }))
+
     return NextResponse.json({
-      topMusics: topMusics.map((item, index) => ({
-        rank: index + 1,
-        codigo: item.codigo,
-        titulo: item.musica?.titulo || "Desconhecida",
-        artista: item.musica?.artista || "Desconhecido",
-        reproducoes: Number(item.reproducoes),
-      })),
+      topMusics,
     })
   } catch (error) {
     console.error("Erro ao buscar músicas mais tocadas:", error)

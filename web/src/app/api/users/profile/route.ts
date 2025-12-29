@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db, users } from "@/lib/db"
-import { getCurrentUser, hashPassword, comparePassword } from "@/lib/auth"
+import { account } from "@/lib/db/schema"
+import { getCurrentUser } from "@/lib/auth"
 import { eq } from "drizzle-orm"
+import bcrypt from "bcryptjs"
 
 export async function PUT(request: NextRequest) {
   try {
@@ -15,7 +17,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, email, currentPassword, newPassword, avatar } = body
+    const { name, email, newPassword, avatar } = body
 
     // Buscar usuário atual
     const [user] = await db
@@ -34,7 +36,6 @@ export async function PUT(request: NextRequest) {
     const updateData: {
       name?: string
       email?: string
-      password?: string
       avatar?: string
       updatedAt: Date
     } = {
@@ -64,24 +65,8 @@ export async function PUT(request: NextRequest) {
       updateData.email = email
     }
 
-    // Atualizar senha
+    // Atualizar senha na tabela account (Better Auth)
     if (newPassword) {
-      if (!currentPassword) {
-        return NextResponse.json(
-          { error: "Senha atual é obrigatória para alterar a senha" },
-          { status: 400 }
-        )
-      }
-
-      const isPasswordValid = await comparePassword(currentPassword, user.password)
-
-      if (!isPasswordValid) {
-        return NextResponse.json(
-          { error: "Senha atual incorreta" },
-          { status: 400 }
-        )
-      }
-
       if (newPassword.length < 6) {
         return NextResponse.json(
           { error: "A nova senha deve ter pelo menos 6 caracteres" },
@@ -89,7 +74,26 @@ export async function PUT(request: NextRequest) {
         )
       }
 
-      updateData.password = await hashPassword(newPassword)
+      // Buscar conta do usuário
+      const [userAccount] = await db
+        .select()
+        .from(account)
+        .where(eq(account.userId, currentUser.userId))
+        .limit(1)
+
+      if (userAccount) {
+        // Hash da nova senha
+        const hashedPassword = await bcrypt.hash(newPassword, 10)
+        
+        // Atualizar senha na tabela account
+        await db
+          .update(account)
+          .set({
+            password: hashedPassword,
+            updatedAt: new Date(),
+          })
+          .where(eq(account.id, userAccount.id))
+      }
     }
 
     // Atualizar avatar

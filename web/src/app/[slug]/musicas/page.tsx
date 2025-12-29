@@ -1,8 +1,20 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import * as React from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useDropzone } from "react-dropzone"
+import {
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type ColumnFiltersState,
+  type SortingState,
+} from "@tanstack/react-table"
 import {
   SidebarProvider,
   SidebarInset,
@@ -37,65 +49,43 @@ import {
   Trash2,
   Play,
   FileVideo,
+  Search,
 } from "lucide-react"
+import { useAuth } from "@/hooks/use-auth"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { Input } from "@/components/ui/input"
+import { useDebounce } from "@/hooks/use-debounce"
 
-interface MusicFile {
+interface Musica {
   id: string
-  title: string
-  artist: string
-  code: string
-  size: number
-  duration?: string
-  uploadedAt: string
-  status: "active" | "processing" | "error"
+  codigo: string
+  artista: string
+  titulo: string
+  arquivo: string
+  nomeArquivo?: string | null
+  tamanho?: number | null
+  duracao?: number | null
+  createdAt: string
+  updatedAt: string
 }
 
 export default function MusicasPage() {
   const router = useRouter()
   const params = useParams()
+  const { user, isLoading: authLoading } = useAuth()
   const [slug, setSlug] = useState<string | null>(null)
-  const [userEmail, setUserEmail] = useState<string>("")
-  const [userName, setUserName] = useState<string>("")
+  const [musics, setMusics] = useState<Musica[]>([])
+  const [loading, setLoading] = useState(true)
   const [files, setFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const [uploadedFiles, setUploadedFiles] = useState<Set<string>>(new Set())
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [dialogOpen, setDialogOpen] = useState(false)
-
-  // Dados mockados - substituir por dados reais da API
-  const [musics, setMusics] = useState<MusicFile[]>([
-    {
-      id: "1",
-      title: "Bohemian Rhapsody",
-      artist: "Queen",
-      code: "01001",
-      size: 45.2,
-      duration: "5:55",
-      uploadedAt: "2024-01-15",
-      status: "active",
-    },
-    {
-      id: "2",
-      title: "Hotel California",
-      artist: "Eagles",
-      code: "01002",
-      size: 52.8,
-      duration: "6:30",
-      uploadedAt: "2024-01-14",
-      status: "active",
-    },
-    {
-      id: "3",
-      title: "Stairway to Heaven",
-      artist: "Led Zeppelin",
-      code: "01003",
-      size: 48.5,
-      duration: "8:02",
-      uploadedAt: "2024-01-13",
-      status: "active",
-    },
-  ])
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const debouncedSearchTerm = useDebounce(searchTerm, 800) // Debounce de 800ms
 
   useEffect(() => {
     async function unwrapParams() {
@@ -106,26 +96,211 @@ export default function MusicasPage() {
   }, [params])
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const email = localStorage.getItem("userEmail")
-      const name = localStorage.getItem("userName")
-      const storedSlug = localStorage.getItem("userSlug")
-      
-      if (slug && storedSlug !== slug) {
-        router.push("/login")
-        return
-      }
-      
-      if (email) {
-        setUserEmail(email)
-        if (name) {
-          setUserName(name)
-        }
-      } else {
-        router.push("/login")
+    if (authLoading) return
+    if (!user) {
+      router.push("/login")
+      return
+    }
+    if (slug && user.slug !== slug) {
+      router.push(`/${user.slug}/musicas`)
+      return
+    }
+  }, [user, slug, authLoading, router])
+
+  useEffect(() => {
+    async function fetchMusicas() {
+      if (!user || !slug) return
+      try {
+        setLoading(true)
+        const response = await fetch("/api/musicas")
+        if (!response.ok) throw new Error("Erro ao buscar músicas")
+        const data = await response.json()
+        setMusics(data.musicas || [])
+      } catch (error) {
+        console.error("Erro ao buscar músicas:", error)
+        setMusics([])
+      } finally {
+        setLoading(false)
       }
     }
-  }, [slug, router])
+    if (user && slug) {
+      fetchMusicas()
+    }
+  }, [user, slug])
+
+  const formatDuration = (seconds?: number | null): string => {
+    if (!seconds) return "-"
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const formatFileSize = (bytes?: number | null): string => {
+    if (!bytes) return "-"
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i]
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Tem certeza que deseja deletar esta música?")) return
+    try {
+      const response = await fetch(`/api/musicas/${id}`, { method: "DELETE" })
+      if (!response.ok) throw new Error("Erro ao deletar música")
+      setMusics((prev) => prev.filter((music) => music.id !== id))
+    } catch (error) {
+      console.error("Erro ao deletar música:", error)
+      alert("Erro ao deletar música. Tente novamente.")
+    }
+  }
+
+  const columns = useMemo<ColumnDef<Musica>[]>(() => {
+    const baseColumns: ColumnDef<Musica>[] = [
+      {
+        accessorKey: "titulo",
+        header: "Música",
+        cell: ({ row }) => (
+          <div className="font-medium">{row.getValue("titulo")}</div>
+        ),
+      },
+      {
+        accessorKey: "artista",
+        header: "Artista",
+      },
+      {
+        accessorKey: "codigo",
+        header: "Código",
+        cell: ({ row }) => (
+          <code className="text-xs bg-muted px-2 py-1 rounded">
+            {row.getValue("codigo")}
+          </code>
+        ),
+      },
+      {
+        accessorKey: "tamanho",
+        header: "Tamanho",
+        cell: ({ row }) => formatFileSize(row.getValue("tamanho")),
+      },
+      {
+        accessorKey: "duracao",
+        header: "Duração",
+        cell: ({ row }) => formatDuration(row.getValue("duracao")),
+      },
+      {
+        accessorKey: "createdAt",
+        header: "Data",
+        cell: ({ row }) => {
+          const date = new Date(row.getValue("createdAt"))
+          return date.toLocaleDateString("pt-BR")
+        },
+      },
+    ]
+
+    if (user?.role === "admin") {
+      baseColumns.push({
+        id: "actions",
+        header: "Ações",
+        cell: ({ row }) => {
+          const music = row.original
+          return (
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => window.open(music.arquivo, "_blank")}
+                title="Reproduzir música"
+              >
+                <Play className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleDelete(music.id)}
+                title="Deletar música"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          )
+        },
+      })
+    } else {
+      baseColumns.push({
+        id: "actions",
+        header: "Ações",
+        cell: ({ row }) => {
+          const music = row.original
+          return (
+            <div className="flex items-center justify-end">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => window.open(music.arquivo, "_blank")}
+                title="Reproduzir música"
+              >
+                <Play className="h-4 w-4" />
+              </Button>
+            </div>
+          )
+        },
+      })
+    }
+
+    return baseColumns
+  }, [user?.role])
+
+  // Função para normalizar texto (remover acentos e converter para lowercase)
+  const normalizeText = (text: string): string => {
+    return text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .trim()
+  }
+
+  // Filtrar dados antes de passar para a tabela (usando debouncedSearchTerm para evitar renderizações pesadas)
+  const filteredData = useMemo<Musica[]>(() => {
+    if (!debouncedSearchTerm) return musics
+    
+    const normalizedSearch = normalizeText(debouncedSearchTerm)
+    return musics.filter((music) => {
+      const titulo = normalizeText(music.titulo || "")
+      const artista = normalizeText(music.artista || "")
+      const codigo = normalizeText(music.codigo || "")
+      return (
+        titulo.includes(normalizedSearch) ||
+        artista.includes(normalizedSearch) ||
+        codigo.includes(normalizedSearch)
+      )
+    })
+  }, [musics, debouncedSearchTerm])
+
+  const table = useReactTable({
+    data: filteredData,
+    columns,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 100, // 100 músicas por página
+      },
+    },
+    state: {
+      sorting,
+      columnFilters,
+    },
+  })
+
+  // Voltar para primeira página quando pesquisar (usando debouncedSearchTerm)
+  useEffect(() => {
+    table.setPageIndex(0)
+  }, [debouncedSearchTerm, table])
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles((prev) => [...prev, ...acceptedFiles])
@@ -153,17 +328,8 @@ export default function MusicasPage() {
     })
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i]
-  }
-
   const handleUpload = async () => {
     if (files.length === 0) return
-
     setUploading(true)
     setErrors({})
 
@@ -174,21 +340,11 @@ export default function MusicasPage() {
       formData.append("filename", file.name)
 
       try {
-        // TODO: Implementar upload real para a API
-        // const response = await fetch("/api/upload", {
-        //   method: "POST",
-        //   body: formData,
-        // })
-
-        // Simulação de upload com progresso
         await new Promise<void>((resolve) => {
           let progress = 0
           const interval = setInterval(() => {
             progress += 10
-            setUploadProgress((prev) => ({
-              ...prev,
-              [i]: progress,
-            }))
+            setUploadProgress((prev) => ({ ...prev, [i]: progress }))
             if (progress >= 100) {
               clearInterval(interval)
               setUploadedFiles((prev) => new Set([...prev, i.toString()]))
@@ -197,17 +353,11 @@ export default function MusicasPage() {
           }, 200)
         })
 
-        // Adicionar à lista de músicas após upload
-        const newMusic: MusicFile = {
-          id: Date.now().toString(),
-          title: file.name.replace(/\.[^/.]+$/, ""),
-          artist: "Artista Desconhecido",
-          code: String(10000 + musics.length + 1).padStart(5, "0"),
-          size: file.size / (1024 * 1024), // MB
-          uploadedAt: new Date().toISOString().split("T")[0],
-          status: "active",
+        const response = await fetch("/api/musicas")
+        if (response.ok) {
+          const data = await response.json()
+          setMusics(data.musicas || [])
         }
-        setMusics((prev) => [newMusic, ...prev])
       } catch (error) {
         setErrors((prev) => ({
           ...prev,
@@ -223,14 +373,10 @@ export default function MusicasPage() {
     setDialogOpen(false)
   }
 
-  const handleDelete = (id: string) => {
-    setMusics((prev) => prev.filter((music) => music.id !== id))
-  }
-
-  if (!slug || !userEmail) {
+  if (authLoading || loading || !user || !slug) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-xl">Carregando...</div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -238,107 +384,153 @@ export default function MusicasPage() {
   return (
     <SidebarProvider>
       <DashboardSidebar
-        userName={userName}
-        userEmail={userEmail}
+        userName={user.name}
+        userEmail={user.email}
         slug={slug}
-        userRole={undefined}
+        userRole={user.role}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <h1 className="text-lg font-semibold">Músicas</h1>
           </div>
+          <ThemeToggle />
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-6">
-          {/* Tabela de Músicas */}
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <CardTitle>Todas as Músicas</CardTitle>
                   <CardDescription>
-                    Gerencie seu catálogo de músicas de karaokê
+                    {user.role === "admin"
+                      ? "Gerencie seu catálogo de músicas de karaokê"
+                      : "Explore o catálogo de músicas de karaokê"}
                   </CardDescription>
                 </div>
-                <Button onClick={() => setDialogOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Adicionar Músicas
-                </Button>
+                {user.role === "admin" && (
+                  <Button onClick={() => setDialogOpen(true)}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Adicionar Músicas
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">#</TableHead>
-                    <TableHead>Música</TableHead>
-                    <TableHead>Artista</TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Tamanho</TableHead>
-                    <TableHead>Duração</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {musics.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
-                        <div className="flex flex-col items-center gap-2">
-                          <Music className="h-12 w-12 text-muted-foreground opacity-50" />
-                          <p className="text-sm text-muted-foreground">
-                            Nenhuma música cadastrada ainda
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Faça upload de vídeos usando a área acima
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    musics.map((music, index) => (
-                      <TableRow key={music.id}>
-                        <TableCell className="font-medium">
-                          {index + 1}
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">{music.title}</div>
-                        </TableCell>
-                        <TableCell>{music.artist}</TableCell>
-                        <TableCell>
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {music.code}
-                          </code>
-                        </TableCell>
-                        <TableCell>{music.size.toFixed(1)} MB</TableCell>
-                        <TableCell>{music.duration || "-"}</TableCell>
-                        <TableCell>
-                          {new Date(music.uploadedAt).toLocaleDateString("pt-BR")}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button variant="ghost" size="icon">
-                              <Play className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(music.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+              {/* Toolbar da data-table */}
+              <div className="flex items-center py-4">
+                <div className="relative w-full max-w-sm">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por título, artista ou código..."
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows?.length ? (
+                      table.getRowModel().rows.map((row) => (
+                        <TableRow
+                          key={row.id}
+                          data-state={row.getIsSelected() && "selected"}
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={columns.length}
+                          className="h-24 text-center"
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <Music className="h-12 w-12 text-muted-foreground opacity-50" />
+                            <p className="text-sm text-muted-foreground">
+                              Nenhuma música encontrada
+                            </p>
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {/* Paginação */}
+              <div className="flex items-center justify-between px-2 py-4">
+                <div className="text-sm text-muted-foreground">
+                  {debouncedSearchTerm ? (
+                    <>
+                      Mostrando {table.getRowModel().rows.length} de {filteredData.length} músicas
+                      {filteredData.length !== musics.length && (
+                        <span className="ml-1">(de {musics.length} no total)</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      Mostrando {table.getRowModel().rows.length} de {musics.length} músicas
+                      {table.getPageCount() > 1 && (
+                        <span className="ml-1">
+                          (página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()})
+                        </span>
+                      )}
+                    </>
                   )}
-                </TableBody>
-              </Table>
+                </div>
+                {table.getPageCount() > 1 && (
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.previousPage()}
+                      disabled={!table.getCanPreviousPage()}
+                    >
+                      ← Anterior
+                    </Button>
+                    <div className="text-sm font-medium min-w-[120px] text-center">
+                      Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.nextPage()}
+                      disabled={!table.getCanNextPage()}
+                    >
+                      Próxima →
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
-          {/* Dialog de Upload */}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogContent className="min-w-[1200px] max-w-[95vw] w-[95vw] min-h-[85vh] h-[85vh] max-h-[85vh] overflow-y-auto flex flex-col">
               <DialogHeader>
@@ -385,7 +577,6 @@ export default function MusicasPage() {
                   </div>
                 </div>
 
-                {/* Lista de arquivos selecionados */}
                 {files.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -468,4 +659,3 @@ export default function MusicasPage() {
     </SidebarProvider>
   )
 }
-

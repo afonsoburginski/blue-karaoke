@@ -7,10 +7,12 @@ import path from "path"
 // Carregar variáveis de ambiente
 dotenv.config({ path: path.join(process.cwd(), ".env.local") })
 
-const connectionString = process.env.DATABASE_URL!
+// Para Supabase: usar DIRECT_URL para migrations (sem pooler)
+// Para PostgreSQL local: usar DATABASE_URL
+const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL!
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL não está definida nas variáveis de ambiente")
+  throw new Error("DATABASE_URL ou DIRECT_URL não está definida nas variáveis de ambiente")
 }
 
 async function main() {
@@ -18,6 +20,7 @@ async function main() {
   const db = drizzle(client)
 
   console.log("🔄 Aplicando migrations...")
+  console.log(`📊 Usando: ${process.env.DIRECT_URL ? 'DIRECT_URL (Supabase)' : 'DATABASE_URL'}`)
   
   await migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") })
   

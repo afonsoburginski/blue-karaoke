@@ -12,6 +12,32 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    // Hook após login para garantir que role e slug estejam disponíveis
+    async afterSignIn({ user }) {
+      // Buscar dados completos do usuário do banco
+      const { db, users } = await import("./db")
+      const { eq } = await import("drizzle-orm")
+      
+      const [fullUser] = await db
+        .select({
+          role: users.role,
+          slug: users.slug,
+        })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1)
+      
+      if (fullUser) {
+        // Adicionar role e slug ao objeto user retornado
+        return {
+          ...user,
+          role: fullUser.role,
+          slug: fullUser.slug,
+        }
+      }
+      
+      return user
+    },
   },
   plugins: [
     username({
@@ -25,13 +51,17 @@ export const auth = betterAuth({
       name: "name",
       image: "image",
       emailVerified: "emailVerified",
+      slug: "slug", // Adicionar slug aos campos do usuário
+      role: "role", // Adicionar role aos campos do usuário
+      // password não está em users - Better Auth armazena na tabela 'account'
     },
-    // Hook para criar slug automaticamente
+    // Hook para criar slug automaticamente após criação
     async afterCreate(user: any) {
       const { db } = await import("./db")
       const { users } = await import("./db/schema")
       const { eq } = await import("drizzle-orm")
       
+      // Gerar slug baseado no nome ou email
       const slug = createSlug(user.name || user.email.split("@")[0])
       
       // Atualizar usuário com slug
@@ -40,18 +70,22 @@ export const auth = betterAuth({
         .set({ slug })
         .where(eq(users.id, user.id))
       
-      return user
+      return { ...user, slug }
     },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60, // 5 minutos
+    },
   },
   trustedOrigins: [
     env.CORS_ORIGIN || "http://localhost:3000",
   ],
   secret: env.JWT_SECRET,
-  baseURL: env.API_BASE_URL || "http://localhost:3000",
+  baseURL: env.CORS_ORIGIN || "http://localhost:3000",
   basePath: "/api/auth",
 })
 

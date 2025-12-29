@@ -1,44 +1,26 @@
-import { drizzle } from "drizzle-orm/better-sqlite3"
-import Database from "better-sqlite3"
+import { drizzle } from "drizzle-orm/postgres-js"
+import postgres from "postgres"
 import * as schema from "./schema"
+import * as dotenv from "dotenv"
 import path from "path"
-import fs from "fs"
 
-// Função para obter o diretório do app (funciona no Electron e Node.js normal)
-function getAppDataPath() {
-  // No Electron, usar app.getPath('userData')
-  // No Node.js normal, usar process.cwd()
-  if (typeof window !== "undefined" && (window as any).electron) {
-    // Renderer process - não deve ser usado aqui
-    return process.cwd()
-  }
-  
-  // Verificar se estamos no Electron main process
-  try {
-    const { app } = require("electron")
-    if (app && !app.isPackaged) {
-      // Desenvolvimento
-      return process.cwd()
-    } else if (app) {
-      // Produção - usar userData do Electron
-      return app.getPath("userData")
-    }
-  } catch (e) {
-    // Não está no Electron, usar process.cwd()
-  }
-  
-  return process.cwd()
+// Carregar .env.local
+dotenv.config({ path: path.join(process.cwd(), ".env.local") })
+
+// Para Supabase: usar DATABASE_URL (pooler) para queries normais
+const DATABASE_URL = process.env.DATABASE_URL
+if (!DATABASE_URL) {
+  throw new Error("DATABASE_URL não está definida nas variáveis de ambiente")
 }
 
-// Garantir que o diretório existe
-const appDataPath = getAppDataPath()
-const dbPath = path.join(appDataPath, "db.sqlite")
-const dbDir = path.dirname(dbPath)
+// Criar conexão com o banco Supabase
+// Pooler suporta até 200 conexões simultâneas
+const client = postgres(DATABASE_URL, {
+  max: 15,
+  idle_timeout: 20,
+  connect_timeout: 10,
+})
 
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true })
-}
-
-const sqlite = new Database(dbPath)
-export const db = drizzle(sqlite, { schema })
+// Criar instância do Drizzle
+export const db = drizzle(client, { schema })
 

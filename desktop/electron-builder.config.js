@@ -11,7 +11,6 @@ module.exports = {
     ".next/static/**/*",
     "public/**/*",
     "package.json",
-    "node_modules/better-sqlite3/**/*",
   ],
   extraResources: [
     {
@@ -25,7 +24,6 @@ module.exports = {
       filter: ["**/*"],
     },
   ],
-  // Configuração para melhor-sqlite3
   rebuild: false,
   win: {
     target: [

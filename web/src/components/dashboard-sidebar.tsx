@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -37,6 +37,7 @@ export function DashboardSidebar({
   userRole,
 }: DashboardSidebarProps) {
   const router = useRouter()
+  const pathname = usePathname()
 
   const handleLogout = async () => {
     try {
@@ -71,24 +72,19 @@ export function DashboardSidebar({
   }
 
   const menuItems = [
-    {
-      title: "Dashboard",
-      icon: Home,
-      url: slug ? `/${slug}` : "/",
-      isActive: true,
-    },
-    {
-      title: "Músicas",
-      icon: Music,
-      url: slug ? `/${slug}/musicas` : "/musicas",
-    },
-    {
-      title: "Histórico",
-      icon: History,
-      url: slug ? `/${slug}/historico` : "/historico",
-    },
+    // Dashboard e Histórico só para admins
     ...(userRole === "admin"
       ? [
+          {
+            title: "Dashboard",
+            icon: Home,
+            url: slug ? `/${slug}` : "/",
+          },
+          {
+            title: "Histórico",
+            icon: History,
+            url: slug ? `/${slug}/historico` : "/historico",
+          },
           {
             title: "Admin",
             icon: User,
@@ -98,11 +94,33 @@ export function DashboardSidebar({
         ]
       : []),
     {
+      title: "Músicas",
+      icon: Music,
+      url: slug ? `/${slug}/musicas` : "/musicas",
+    },
+    {
       title: "Perfil",
       icon: User,
       url: slug ? `/${slug}/perfil` : "/perfil",
     },
-  ]
+  ].map((item) => {
+    const dashboardUrl = slug ? `/${slug}` : "/"
+    const isDashboard = item.url === dashboardUrl
+    
+    // Para dashboard, só está ativo se for exatamente a URL (não pode ter sub-rotas)
+    if (isDashboard) {
+      return {
+        ...item,
+        isActive: pathname === item.url,
+      }
+    }
+    
+    // Para outras rotas, está ativo se o pathname começar com a URL
+    return {
+      ...item,
+      isActive: pathname?.startsWith(item.url) || false,
+    }
+  })
 
   return (
     <Sidebar collapsible="icon">

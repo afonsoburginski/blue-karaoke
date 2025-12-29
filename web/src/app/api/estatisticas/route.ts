@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db, estatisticas, users, musicas, historico } from "@/lib/db"
+import { db, estatisticas, users, musicas, historico, assinaturas, postgresClient } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { eq, sql, count, and } from "drizzle-orm"
+import { eq, sql, count, and, gte, lte, or } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,8 +55,18 @@ export async function GET(request: NextRequest) {
 
       const totalGb = Math.round((totalGbResult[0]?.total || 0) / (1024 * 1024 * 1024))
 
-      // Receita mensal (mock - implementar lógica real depois)
-      const receitaMensal = 0
+      // Calcular receita mensal real: somar valores de assinaturas criadas no mês atual
+      // Usar SQL direto para comparação de datas mais confiável
+      const receitaQuery = await postgresClient`
+        SELECT COALESCE(SUM(valor), 0)::int as total
+        FROM assinaturas
+        WHERE 
+          (status = 'ativa' OR status = 'pendente')
+          AND data_inicio >= DATE_TRUNC('month', CURRENT_DATE)
+          AND data_inicio < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+      `
+      
+      const receitaMensal = Number(receitaQuery[0]?.total || 0)
 
       // Salvar ou atualizar cache
       if (cachedStats) {
@@ -91,7 +101,6 @@ export async function GET(request: NextRequest) {
     const userHistory = await db
       .select({
         totalSessoes: count(),
-        mediaPontuacao: sql<number>`COALESCE(AVG(${historico.nota}), 0)`,
       })
       .from(historico)
       .where(eq(historico.userId, currentUser.userId))
@@ -112,7 +121,6 @@ export async function GET(request: NextRequest) {
       },
       userStats: {
         totalSessoes: userHistory[0]?.totalSessoes || 0,
-        mediaPontuacao: Math.round(userHistory[0]?.mediaPontuacao || 0),
         ultimaSessao: ultimaSessao[0]?.dataExecucao || null,
       },
     })

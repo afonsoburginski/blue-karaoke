@@ -53,6 +53,114 @@ export default function CadastroPage() {
       })
 
       if (authError) {
+        // Se o erro for de usuário já existente, verificar se precisa pagar e redirecionar
+        if (authError.message?.includes("already exists") || authError.message?.includes("já existe") || authError.message?.includes("email")) {
+          // Tentar fazer login automaticamente para verificar assinatura
+          try {
+            const loginResponse = await authClient.signIn.email({
+              email: formData.email,
+              password: formData.password,
+            })
+
+            if (loginResponse.data?.user) {
+              // Verificar assinatura
+              const subscriptionResponse = await fetch(`/api/assinaturas/check?userId=${loginResponse.data.user.id}`)
+              if (subscriptionResponse.ok) {
+                const subscriptionData = await subscriptionResponse.json()
+                
+                // Se não tiver assinatura, ir direto para checkout
+                if (!subscriptionData.hasSubscription || !subscriptionData.subscription?.isActive) {
+                  const slug = createSlug(loginResponse.data.user.name || formData.name)
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("userEmail", loginResponse.data.user.email)
+                    localStorage.setItem("userName", loginResponse.data.user.name || formData.name)
+                    localStorage.setItem("userSlug", slug)
+                  }
+                  router.push(`/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
+                  return
+                } else {
+                  // Se tiver assinatura, verificar role e redirecionar
+                  const slug = createSlug(loginResponse.data.user.name || formData.name)
+                  const userRole = (loginResponse.data.user as any).role || "user"
+                  
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("userEmail", loginResponse.data.user.email)
+                    localStorage.setItem("userName", loginResponse.data.user.name || formData.name)
+                    localStorage.setItem("userSlug", slug)
+                  }
+                  
+                  // Se for admin, ir para dashboard; se não, ir para perfil
+                  if (userRole === "admin") {
+                    router.push(`/${slug}`)
+                  } else {
+                    router.push(`/${slug}/perfil`)
+                  }
+                  return
+                }
+              }
+            }
+          } catch (loginErr) {
+            // Se não conseguir fazer login (senha errada), pedir para fazer login
+            setError("Este email já está cadastrado. Faça login para continuar.")
+            setTimeout(() => {
+              router.push(`/login?email=${encodeURIComponent(formData.email)}`)
+            }, 2000)
+            return
+          }
+          
+          // Se chegou aqui, o email já existe - tentar fazer login
+          setError("Este email já está cadastrado. Fazendo login...")
+          
+          try {
+            const loginResponse = await authClient.signIn.email({
+              email: formData.email,
+              password: formData.password,
+            })
+            
+            if (loginResponse.data?.user) {
+              const userRole = (loginResponse.data.user as any).role || "user"
+              const slug = createSlug(loginResponse.data.user.name || formData.name)
+              
+              // Se for admin, redirecionar para dashboard
+              if (userRole === "admin") {
+                router.push(`/${slug}`)
+                return
+              }
+              
+              // Verificar se o usuário já tem assinatura ativa
+              try {
+                const subscriptionResponse = await fetch(`/api/assinaturas/check?userId=${loginResponse.data.user.id}`, {
+                  credentials: "include",
+                })
+                
+                if (subscriptionResponse.ok) {
+                  const subscriptionData = await subscriptionResponse.json()
+                  
+                  // Se tiver assinatura ativa, redirecionar para o perfil
+                  if (subscriptionData.hasSubscription && subscriptionData.subscription?.isActive === true) {
+                    router.push(`/${slug}/perfil`)
+                    return
+                  }
+                }
+              } catch (subErr) {
+                console.error("Erro ao verificar assinatura:", subErr)
+              }
+              
+              // Se não tiver assinatura ativa, redirecionar para checkout
+              router.push(`/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
+              return
+            }
+          } catch (loginErr) {
+            console.error("Erro ao fazer login:", loginErr)
+            setError("Este email já está cadastrado. Faça login para continuar.")
+            setTimeout(() => {
+              router.push(`/login?email=${encodeURIComponent(formData.email)}`)
+            }, 2000)
+            return
+          }
+          
+          return
+        }
         throw new Error(authError.message || "Erro ao criar conta")
       }
 
@@ -66,7 +174,8 @@ export default function CadastroPage() {
           localStorage.setItem("userSlug", slug)
         }
 
-        router.push(`/${slug}`)
+        // Redirecionar para página de checkout
+        router.push(`/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar conta")

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Users, Mail, Calendar, CreditCard } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Dialog,
   DialogContent,
@@ -168,9 +169,10 @@ export default function AdminUsuariosPage() {
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <h1 className="text-lg font-semibold">Gerenciar Usuários</h1>
           </div>
+          <ThemeToggle />
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-6">
           <Card>

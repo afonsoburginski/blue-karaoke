@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
 import {
   SidebarProvider,
   SidebarInset,
@@ -24,221 +25,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { History, Music, Calendar, Clock, TrendingUp } from "lucide-react"
+import { History, Music, Calendar, Clock, Play } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { useRealtimeHistorico } from "@/hooks/use-realtime-historico"
 
 interface HistoryEntry {
   id: string
-  musicTitle: string
-  artist: string
-  code: string
-  playedAt: string
-  score?: number
-  duration: string
+  musicaId: string
+  codigo: string
+  dataExecucao: string
+  musica: {
+    id: string
+    titulo: string
+    artista: string
+    duracao: number | null
+  } | null
+}
+
+interface MostPlayed {
+  musicaId: string
+  codigo: string
+  vezesTocada: number
+  titulo: string
+  artista: string
+  duracao: number | null
 }
 
 export default function HistoricoPage() {
   const router = useRouter()
   const params = useParams()
+  const { user, isLoading: authLoading } = useAuth()
   const [slug, setSlug] = useState<string | null>(null)
-  const [userEmail, setUserEmail] = useState<string>("")
-  const [userName, setUserName] = useState<string>("")
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("all")
-
-  // Dados mockados - substituir por dados reais da API
-  const historyData: Record<string, HistoryEntry[]> = {
-    today: [
-      {
-        id: "1",
-        musicTitle: "Bohemian Rhapsody",
-        artist: "Queen",
-        code: "01001",
-        playedAt: "2024-01-15T14:30:00",
-        score: 92,
-        duration: "5:55",
-      },
-      {
-        id: "2",
-        musicTitle: "Hotel California",
-        artist: "Eagles",
-        code: "01002",
-        playedAt: "2024-01-15T13:15:00",
-        score: 88,
-        duration: "6:30",
-      },
-    ],
-    week: [
-      {
-        id: "1",
-        musicTitle: "Bohemian Rhapsody",
-        artist: "Queen",
-        code: "01001",
-        playedAt: "2024-01-15T14:30:00",
-        score: 92,
-        duration: "5:55",
-      },
-      {
-        id: "2",
-        musicTitle: "Hotel California",
-        artist: "Eagles",
-        code: "01002",
-        playedAt: "2024-01-15T13:15:00",
-        score: 88,
-        duration: "6:30",
-      },
-      {
-        id: "3",
-        musicTitle: "Stairway to Heaven",
-        artist: "Led Zeppelin",
-        code: "01003",
-        playedAt: "2024-01-14T16:20:00",
-        score: 85,
-        duration: "8:02",
-      },
-      {
-        id: "4",
-        musicTitle: "Sweet Child O' Mine",
-        artist: "Guns N' Roses",
-        code: "01004",
-        playedAt: "2024-01-13T11:45:00",
-        score: 90,
-        duration: "5:56",
-      },
-    ],
-    month: [
-      {
-        id: "1",
-        musicTitle: "Bohemian Rhapsody",
-        artist: "Queen",
-        code: "01001",
-        playedAt: "2024-01-15T14:30:00",
-        score: 92,
-        duration: "5:55",
-      },
-      {
-        id: "2",
-        musicTitle: "Hotel California",
-        artist: "Eagles",
-        code: "01002",
-        playedAt: "2024-01-15T13:15:00",
-        score: 88,
-        duration: "6:30",
-      },
-      {
-        id: "3",
-        musicTitle: "Stairway to Heaven",
-        artist: "Led Zeppelin",
-        code: "01003",
-        playedAt: "2024-01-14T16:20:00",
-        score: 85,
-        duration: "8:02",
-      },
-      {
-        id: "4",
-        musicTitle: "Sweet Child O' Mine",
-        artist: "Guns N' Roses",
-        code: "01004",
-        playedAt: "2024-01-13T11:45:00",
-        score: 90,
-        duration: "5:56",
-      },
-      {
-        id: "5",
-        musicTitle: "Don't Stop Believin'",
-        artist: "Journey",
-        code: "01005",
-        playedAt: "2024-01-12T09:30:00",
-        score: 87,
-        duration: "4:18",
-      },
-      {
-        id: "6",
-        musicTitle: "Livin' on a Prayer",
-        artist: "Bon Jovi",
-        code: "01021",
-        playedAt: "2024-01-11T15:20:00",
-        score: 89,
-        duration: "4:09",
-      },
-    ],
-    all: [
-      {
-        id: "1",
-        musicTitle: "Bohemian Rhapsody",
-        artist: "Queen",
-        code: "01001",
-        playedAt: "2024-01-15T14:30:00",
-        score: 92,
-        duration: "5:55",
-      },
-      {
-        id: "2",
-        musicTitle: "Hotel California",
-        artist: "Eagles",
-        code: "01002",
-        playedAt: "2024-01-15T13:15:00",
-        score: 88,
-        duration: "6:30",
-      },
-      {
-        id: "3",
-        musicTitle: "Stairway to Heaven",
-        artist: "Led Zeppelin",
-        code: "01003",
-        playedAt: "2024-01-14T16:20:00",
-        score: 85,
-        duration: "8:02",
-      },
-      {
-        id: "4",
-        musicTitle: "Sweet Child O' Mine",
-        artist: "Guns N' Roses",
-        code: "01004",
-        playedAt: "2024-01-13T11:45:00",
-        score: 90,
-        duration: "5:56",
-      },
-      {
-        id: "5",
-        musicTitle: "Don't Stop Believin'",
-        artist: "Journey",
-        code: "01005",
-        playedAt: "2024-01-12T09:30:00",
-        score: 87,
-        duration: "4:18",
-      },
-      {
-        id: "6",
-        musicTitle: "Livin' on a Prayer",
-        artist: "Bon Jovi",
-        code: "01021",
-        playedAt: "2024-01-11T15:20:00",
-        score: 89,
-        duration: "4:09",
-      },
-      {
-        id: "7",
-        musicTitle: "Wonderwall",
-        artist: "Oasis",
-        code: "01022",
-        playedAt: "2024-01-10T10:15:00",
-        score: 86,
-        duration: "4:18",
-      },
-      {
-        id: "8",
-        musicTitle: "Sweet Caroline",
-        artist: "Neil Diamond",
-        code: "01020",
-        playedAt: "2024-01-09T14:00:00",
-        score: 91,
-        duration: "3:23",
-      },
-    ],
-  }
-
-  const history = historyData[timeFilter] || []
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [mostPlayed, setMostPlayed] = useState<MostPlayed[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function unwrapParams() {
@@ -249,26 +70,85 @@ export default function HistoricoPage() {
   }, [params])
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const email = localStorage.getItem("userEmail")
-      const name = localStorage.getItem("userName")
-      const storedSlug = localStorage.getItem("userSlug")
-      
-      if (slug && storedSlug !== slug) {
-        router.push("/login")
-        return
-      }
-      
-      if (email) {
-        setUserEmail(email)
-        if (name) {
-          setUserName(name)
-        }
+    // Não fazer nada enquanto está carregando
+    if (authLoading) {
+      return
+    }
+
+    if (!user) {
+      router.push("/login")
+      return
+    }
+
+    // Verificar se é admin - apenas admins podem acessar histórico
+    if (user.role !== "admin") {
+      // Usuários com role "user" não podem acessar histórico
+      // Redirecionar para o perfil
+      if (user.slug) {
+        router.push(`/${user.slug}/perfil`)
       } else {
         router.push("/login")
       }
+      return
     }
-  }, [slug, router])
+
+    if (slug && user.slug !== slug) {
+      router.push(`/${user.slug}/historico`)
+      return
+    }
+  }, [user, slug, authLoading, router])
+
+  const fetchHistory = useCallback(async () => {
+    if (!user) return
+
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/historico?filter=${timeFilter}&limit=100`)
+      if (!response.ok) {
+        throw new Error("Erro ao buscar histórico")
+      }
+      const data = await response.json()
+      setHistory(data.historico || [])
+      setMostPlayed(data.maisTocadas || [])
+    } catch (error) {
+      console.error("Erro ao buscar histórico:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [user, timeFilter])
+
+  useEffect(() => {
+    if (user && slug) {
+      fetchHistory()
+    }
+  }, [user, slug, fetchHistory])
+
+  // Callbacks memoizados para Realtime
+  const handleInsert = useCallback(() => {
+    if (user && slug) {
+      fetchHistory()
+    }
+  }, [user, slug, fetchHistory])
+
+  const handleUpdate = useCallback(() => {
+    if (user && slug) {
+      fetchHistory()
+    }
+  }, [user, slug, fetchHistory])
+
+  const handleDelete = useCallback(() => {
+    if (user && slug) {
+      fetchHistory()
+    }
+  }, [user, slug, fetchHistory])
+
+  // Realtime para histórico
+  useRealtimeHistorico({
+    userId: user?.id || "",
+    onInsert: handleInsert,
+    onUpdate: handleUpdate,
+    onDelete: handleDelete,
+  })
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString)
@@ -278,15 +158,21 @@ export default function HistoricoPage() {
     }
   }
 
-  const getScoreColor = (score?: number) => {
-    if (!score) return "default"
-    if (score >= 90) return "default"
-    if (score >= 80) return "secondary"
-    if (score >= 70) return "outline"
-    return "destructive"
+  const formatDuration = (seconds: number | null): string => {
+    if (!seconds) return "-"
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  if (!slug || !userEmail) {
+  const getTotalMinutes = (): number => {
+    return history.reduce((acc, entry) => {
+      const duration = entry.musica?.duracao || 0
+      return acc + duration
+    }, 0)
+  }
+
+  if (authLoading || !user || !slug) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-foreground text-xl">Carregando...</div>
@@ -297,24 +183,25 @@ export default function HistoricoPage() {
   return (
     <SidebarProvider>
       <DashboardSidebar
-        userName={userName}
-        userEmail={userEmail}
+        userName={user.name}
+        userEmail={user.email}
         slug={slug}
-        userRole={undefined}
+        userRole={user.role}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <h1 className="text-lg font-semibold">Histórico</h1>
           </div>
+          <ThemeToggle />
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-6">
           {/* Estatísticas Rápidas */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total de Sessões</CardTitle>
+                <CardTitle className="text-sm font-medium">Total de Reproduções</CardTitle>
                 <History className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -325,58 +212,90 @@ export default function HistoricoPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Média de Pontuação</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {history.length > 0
-                    ? Math.round(
-                        history.reduce((acc, h) => acc + (h.score || 0), 0) / history.length
-                      )
-                    : 0}
-                </div>
-                <p className="text-xs text-muted-foreground">Pontos médios</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Tempo Total</CardTitle>
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {history.length > 0
-                    ? history.reduce((acc, h) => {
-                        const [min, sec] = h.duration.split(":").map(Number)
-                        return acc + min * 60 + sec
-                      }, 0)
-                    : 0}
+                  {Math.floor(getTotalMinutes() / 60)}h {getTotalMinutes() % 60}m
                 </div>
-                <p className="text-xs text-muted-foreground">Minutos totais</p>
+                <p className="text-xs text-muted-foreground">Tempo de reprodução</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Última Sessão</CardTitle>
+                <CardTitle className="text-sm font-medium">Última Reprodução</CardTitle>
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   {history.length > 0
-                    ? formatDateTime(history[0].playedAt).date
+                    ? formatDateTime(history[0].dataExecucao).date
                     : "-"}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {history.length > 0
-                    ? formatDateTime(history[0].playedAt).time
-                    : "Nenhuma sessão"}
+                    ? formatDateTime(history[0].dataExecucao).time
+                    : "Nenhuma reprodução"}
                 </p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Mais Tocadas */}
+          {mostPlayed.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Mais Tocadas</CardTitle>
+                <CardDescription>
+                  Suas músicas mais reproduzidas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">#</TableHead>
+                      <TableHead>Música</TableHead>
+                      <TableHead>Artista</TableHead>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Duração</TableHead>
+                      <TableHead className="text-right">Vezes Tocada</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mostPlayed.map((item, index) => (
+                      <TableRow key={item.musicaId}>
+                        <TableCell className="font-medium">{index + 1}</TableCell>
+                        <TableCell>
+                          <div className="font-medium">{item.titulo}</div>
+                        </TableCell>
+                        <TableCell>{item.artista}</TableCell>
+                        <TableCell>
+                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                            {item.codigo}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            {formatDuration(item.duracao)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Play className="h-3 w-3 text-muted-foreground" />
+                            {item.vezesTocada}x
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Tabela de Histórico */}
           <Card>
@@ -405,75 +324,73 @@ export default function HistoricoPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">#</TableHead>
-                    <TableHead>Música</TableHead>
-                    <TableHead>Artista</TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Data/Hora</TableHead>
-                    <TableHead>Duração</TableHead>
-                    <TableHead className="text-right">Pontuação</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {history.length === 0 ? (
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <div className="text-muted-foreground">Carregando...</div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        <div className="flex flex-col items-center gap-2">
-                          <History className="h-12 w-12 text-muted-foreground opacity-50" />
-                          <p className="text-sm text-muted-foreground">
-                            Nenhuma música tocada ainda
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Seu histórico de reproduções aparecerá aqui
-                          </p>
-                        </div>
-                      </TableCell>
+                      <TableHead className="w-12">#</TableHead>
+                      <TableHead>Música</TableHead>
+                      <TableHead>Artista</TableHead>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Data/Hora</TableHead>
+                      <TableHead>Duração</TableHead>
                     </TableRow>
-                  ) : (
-                    history.map((entry, index) => {
-                      const { date, time } = formatDateTime(entry.playedAt)
-                      return (
-                        <TableRow key={entry.id}>
-                          <TableCell className="font-medium">
-                            {index + 1}
-                          </TableCell>
-                          <TableCell>
-                            <div className="font-medium">{entry.musicTitle}</div>
-                          </TableCell>
-                          <TableCell>{entry.artist}</TableCell>
-                          <TableCell>
-                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                              {entry.code}
-                            </code>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">{date}</div>
-                            <div className="text-xs text-muted-foreground">{time}</div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              {entry.duration}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {entry.score !== undefined ? (
-                              <Badge variant={getScoreColor(entry.score)}>
-                                {entry.score} pts
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {history.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8">
+                          <div className="flex flex-col items-center gap-2">
+                            <History className="h-12 w-12 text-muted-foreground opacity-50" />
+                            <p className="text-sm text-muted-foreground">
+                              Nenhuma música tocada ainda
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Seu histórico de reproduções aparecerá aqui
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      history.map((entry, index) => {
+                        const { date, time } = formatDateTime(entry.dataExecucao)
+                        return (
+                          <TableRow key={entry.id}>
+                            <TableCell className="font-medium">{index + 1}</TableCell>
+                            <TableCell>
+                              <div className="font-medium">
+                                {entry.musica?.titulo || "Música não encontrada"}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {entry.musica?.artista || "Artista desconhecido"}
+                            </TableCell>
+                            <TableCell>
+                              <code className="text-xs bg-muted px-2 py-1 rounded">
+                                {entry.codigo}
+                              </code>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm">{date}</div>
+                              <div className="text-xs text-muted-foreground">{time}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-muted-foreground" />
+                                {formatDuration(entry.musica?.duracao || null)}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -481,4 +398,3 @@ export default function HistoricoPage() {
     </SidebarProvider>
   )
 }
-

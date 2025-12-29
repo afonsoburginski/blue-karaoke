@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,10 +13,19 @@ import { createSlug } from "@/lib/slug"
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+
+  // Preencher email se vier da URL (ex: quando usuário já existe no cadastro)
+  useEffect(() => {
+    const emailParam = searchParams.get("email")
+    if (emailParam) {
+      setEmail(emailParam)
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,7 +59,44 @@ export default function LoginPage() {
           localStorage.setItem("userSlug", slug)
         }
 
-        router.push(`/${slug}`)
+        // Verificar role do usuário na sessão do Better Auth
+        const userRole = (data.user as any).role || "user"
+
+        // Se for admin, redirecionar direto para dashboard (não precisa de assinatura)
+        if (userRole === "admin") {
+          router.push(`/${slug}`)
+          return
+        }
+
+        // Verificar se o usuário tem assinatura ativa (apenas para não-admin)
+        try {
+          const subscriptionResponse = await fetch(`/api/assinaturas/check?userId=${data.user.id}`, {
+            credentials: "include",
+          })
+          
+          if (subscriptionResponse.ok) {
+            const subscriptionData = await subscriptionResponse.json()
+            
+            // Se tiver assinatura ativa, redirecionar para o perfil (usuários não-admin só podem ver perfil)
+            if (subscriptionData.hasSubscription && subscriptionData.subscription?.isActive === true) {
+              router.push(`/${slug}/perfil`)
+              return
+            }
+            
+            // Se não tiver assinatura ou não estiver ativa, redirecionar para checkout
+            router.push(`/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
+            return
+          }
+        } catch (err) {
+          console.error("Erro ao verificar assinatura:", err)
+          // Em caso de erro, tentar verificar novamente ou redirecionar para perfil
+          // Não redirecionar para checkout automaticamente em caso de erro
+          router.push(`/${slug}/perfil`)
+          return
+        }
+
+        // Fallback: se não conseguiu verificar, redirecionar para perfil
+        router.push(`/${slug}/perfil`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao fazer login")

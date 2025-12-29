@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db, historico, musicas } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { eq, desc, and } from "drizzle-orm"
+import { eq, desc, and, sql } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,11 +30,12 @@ export async function GET(request: NextRequest) {
         userId: historico.userId,
         musicaId: historico.musicaId,
         codigo: historico.codigo,
-        nota: historico.nota,
         dataExecucao: historico.dataExecucao,
         musica: {
+          id: musicas.id,
           titulo: musicas.titulo,
           artista: musicas.artista,
+          duracao: musicas.duracao,
         },
       })
       .from(historico)
@@ -68,7 +69,36 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ historico: filteredHistory })
+    // Buscar músicas mais tocadas (agregado)
+    const mostPlayedQuery = await db
+      .select({
+        musicaId: historico.musicaId,
+        codigo: historico.codigo,
+        vezesTocada: sql<number>`count(*)::int`.as("vezes_tocada"),
+        titulo: musicas.titulo,
+        artista: musicas.artista,
+        duracao: musicas.duracao,
+      })
+      .from(historico)
+      .leftJoin(musicas, eq(historico.musicaId, musicas.id))
+      .where(eq(historico.userId, currentUser.userId))
+      .groupBy(historico.musicaId, historico.codigo, musicas.titulo, musicas.artista, musicas.duracao)
+      .orderBy(desc(sql`count(*)`))
+      .limit(10)
+
+    const mostPlayed = mostPlayedQuery.map(item => ({
+      musicaId: item.musicaId,
+      codigo: item.codigo,
+      vezesTocada: Number(item.vezesTocada),
+      titulo: item.titulo || "Desconhecida",
+      artista: item.artista || "Desconhecido",
+      duracao: item.duracao,
+    }))
+
+    return NextResponse.json({ 
+      historico: filteredHistory,
+      maisTocadas: mostPlayed
+    })
   } catch (error) {
     console.error("Erro ao buscar histórico:", error)
     return NextResponse.json(
@@ -90,11 +120,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { musicaId, codigo, nota } = body
+    const { musicaId, codigo } = body
 
-    if (!musicaId || !codigo || nota === undefined) {
+    if (!musicaId || !codigo) {
       return NextResponse.json(
-        { error: "Campos obrigatórios: musicaId, codigo, nota" },
+        { error: "Campos obrigatórios: musicaId, codigo" },
         { status: 400 }
       )
     }
@@ -105,7 +135,6 @@ export async function POST(request: NextRequest) {
         userId: currentUser.userId,
         musicaId,
         codigo,
-        nota: Math.max(0, Math.min(100, nota)), // Garantir entre 0-100
       })
       .returning()
 

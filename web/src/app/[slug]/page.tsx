@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import {
@@ -29,6 +29,9 @@ import { Users, Music, HardDrive, DollarSign, TrendingUp } from "lucide-react"
 import { useStorageUsage } from "@/hooks/use-storage-usage"
 import { useDashboardStats } from "@/hooks/use-dashboard-stats"
 import { useTopMusics } from "@/hooks/use-top-musics"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { useRealtimeDashboard } from "@/hooks/use-realtime-dashboard"
+import { authClient } from "@/lib/auth-client"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -68,19 +71,111 @@ export default function DashboardPage() {
   }, [params])
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login")
+    // Não fazer nada enquanto está carregando
+    if (authLoading) {
       return
     }
 
-    if (user && slug && user.slug !== slug) {
-      router.push(`/${user.slug}`)
-      return
-    }
+    // Aguardar um pouco para garantir que a sessão foi carregada completamente
+    // Isso evita redirecionamentos durante Fast Refresh ou atualizações de sessão
+    const timeoutId = setTimeout(() => {
+      const currentUser = user // Capturar valor atual
+      
+      if (!currentUser) {
+        router.push("/login")
+        return
+      }
 
-    // Mock de novos usuários (API futura)
-    setNewUsers([])
+      // Verificar se é admin - apenas admins podem acessar dashboard
+      const userRole = currentUser.role || "user"
+      
+      if (userRole !== "admin") {
+        // Usuários com role "user" não podem acessar dashboard
+        // Redirecionar para o perfil
+        const currentSlug = currentUser?.slug
+        if (currentSlug) {
+          router.push(`/${currentSlug}/perfil`)
+        } else {
+          router.push("/login")
+        }
+        return
+      }
+
+      // Verificar slug antes de continuar
+      const currentSlug = currentUser?.slug
+      if (slug && currentSlug && currentSlug !== slug) {
+        router.push(`/${currentSlug}`)
+        return
+      }
+
+      // Remover parâmetro de pagamento se existir
+      if (typeof window !== "undefined") {
+        const searchParams = new URLSearchParams(window.location.search)
+        const paymentSuccess = searchParams.get("payment_success")
+        
+        if (paymentSuccess === "true") {
+          // Remover o parâmetro da URL
+          const newUrl = window.location.pathname
+          window.history.replaceState({}, "", newUrl)
+        }
+      }
+
+      // Buscar novos usuários (apenas para admin)
+      if (userRole === "admin") {
+        fetch("/api/estatisticas/novos-usuarios?limit=5")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.usuarios) {
+              setNewUsers(data.usuarios)
+            }
+          })
+          .catch((error) => {
+            console.error("Erro ao buscar novos usuários:", error)
+          })
+      }
+    }, 100) // Pequeno delay para garantir que a sessão está estável
+
+    return () => clearTimeout(timeoutId)
   }, [user, slug, authLoading, router])
+
+  // Callbacks memoizados para Realtime
+  const handleHistoricoChange = useCallback(() => {
+    refetchStats()
+    refetchTopMusics()
+  }, [refetchStats, refetchTopMusics])
+
+  const handleMusicasChange = useCallback(() => {
+    refetchStats()
+  }, [refetchStats])
+
+  const handleUsersChange = useCallback(() => {
+    if (user && user.role === "admin") {
+      fetch("/api/estatisticas/novos-usuarios?limit=5")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.usuarios) {
+            setNewUsers(data.usuarios)
+          }
+        })
+        .catch((error) => {
+          console.error("Erro ao buscar novos usuários:", error)
+        })
+    }
+    refetchStats()
+  }, [user, refetchStats])
+
+  const handleEstatisticasChange = useCallback(() => {
+    refetchStats()
+  }, [refetchStats])
+
+  // Realtime para dashboard
+  useRealtimeDashboard({
+    userId: user?.id || "",
+    onHistoricoChange: handleHistoricoChange,
+    onMusicasChange: handleMusicasChange,
+    onUsersChange: handleUsersChange,
+    onEstatisticasChange: handleEstatisticasChange,
+  })
 
   const isLoading =
     authLoading || statsLoading || topMusicsLoading || storageLoading || !user || !slug
@@ -104,9 +199,10 @@ export default function DashboardPage() {
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <h1 className="text-lg font-semibold">Dashboard</h1>
           </div>
+          <ThemeToggle />
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-6">
           {/* Cards de Estatísticas */}
@@ -273,15 +369,17 @@ export default function DashboardPage() {
                             <div className="text-xs text-muted-foreground">{user.email}</div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="text-sm">{new Date(user.joinedAt).toLocaleDateString("pt-BR")}</div>
-                            <div className="text-xs text-muted-foreground">{user.status}</div>
+                            <div className="text-sm">
+                              {new Date(user.createdAt).toLocaleDateString("pt-BR")}
+                            </div>
+                            <div className="text-xs text-muted-foreground capitalize">{user.role}</div>
                           </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={2} className="text-center text-muted-foreground">
-                          Nenhum usuário recente
+                        <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
+                          {user.role === "admin" ? "Nenhum usuário recente" : "Acesso restrito"}
                         </TableCell>
                       </TableRow>
                     )}

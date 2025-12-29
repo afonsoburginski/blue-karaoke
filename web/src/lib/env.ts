@@ -15,6 +15,8 @@ function getEnv(key: string, defaultValue?: string): string {
 export const env = {
   // Database
   DATABASE_URL: getEnv("DATABASE_URL"),
+  // Supabase: DIRECT_URL para migrations (opcional)
+  DIRECT_URL: process.env.DIRECT_URL,
   
   // App
   NODE_ENV: getEnv("NODE_ENV", "development"),
@@ -49,6 +51,16 @@ export const env = {
       ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
       : ""
   ),
+  
+  // Mercado Pago (usa .env.local em dev, .env em produção)
+  MERCADOPAGO_ACCESS_TOKEN: getEnv("MERCADOPAGO_ACCESS_TOKEN"),
+  MERCADOPAGO_CLIENT_ID: getEnv("MERCADOPAGO_CLIENT_ID", "5541138192357609"),
+  MERCADOPAGO_CLIENT_SECRET: getEnv("MERCADOPAGO_CLIENT_SECRET", "KOgP19NHodGBLq4BgHrQF6gucgEVKCd7"),
+  MERCADOPAGO_WEBHOOK_SECRET: getEnv("MERCADOPAGO_WEBHOOK_SECRET", "37168bd6010c5aa5b18040fc75c35ddb952db75bc4088b4745a0a908d6eefafd"),
+  
+  // Supabase (para Realtime)
+  SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
   
   // Helpers
   isDevelopment: process.env.NODE_ENV === "development",

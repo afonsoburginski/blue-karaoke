@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
     CORS_ORIGIN: env.CORS_ORIGIN,
     SESSION_SECRET: env.SESSION_SECRET,
     API_BASE_URL: env.API_BASE_URL,
+    NEXT_PUBLIC_NODE_ENV: process.env.NODE_ENV || "development",
+    NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY: process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "",
   },
 };
 

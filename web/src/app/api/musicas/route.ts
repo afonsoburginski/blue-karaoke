@@ -31,15 +31,22 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get("userId")
 
-    // Determinar qual userId usar
-    const targetUserId = user.role === "admin" && userId ? userId : currentUser.userId
-
-    // Construir query completa de uma vez
-    const allMusicas = await db
-      .select()
-      .from(musicas)
-      .where(eq(musicas.userId, targetUserId))
-      .orderBy(desc(musicas.createdAt))
+    // Se for admin e passar userId, mostrar músicas daquele usuário
+    // Caso contrário, mostrar todas as músicas disponíveis
+    let allMusicas
+    if (user.role === "admin" && userId) {
+      allMusicas = await db
+        .select()
+        .from(musicas)
+        .where(eq(musicas.userId, userId))
+        .orderBy(desc(musicas.createdAt))
+    } else {
+      // Para todos os usuários (admin ou não), mostrar todas as músicas
+      allMusicas = await db
+        .select()
+        .from(musicas)
+        .orderBy(desc(musicas.createdAt))
+    }
 
     return NextResponse.json({ musicas: allMusicas })
   } catch (error) {
