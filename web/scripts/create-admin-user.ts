@@ -4,9 +4,11 @@
  */
 
 import { db, users } from "../src/lib/db"
+import { account } from "../src/lib/db/schema"
 import { eq } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import { createSlug } from "../src/lib/slug"
+import { createId } from "@paralleldrive/cuid2"
 
 const ADMIN_EMAIL = "afonsoburginski@gmail.com"
 const ADMIN_PASSWORD = "123456789"
@@ -42,9 +44,6 @@ async function createAdminUser() {
     }
 
     console.log("📝 Criando usuário admin...")
-
-    // Gerar hash da senha
-    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10)
     
     // Criar slug
     const slug = createSlug(ADMIN_NAME)
@@ -62,20 +61,37 @@ async function createAdminUser() {
       finalSlug = `${slug}-${Date.now()}`
     }
 
-    // Criar usuário admin
+    // Gerar ID único (CUID)
+    const userId = createId()
+
+    // Criar usuário admin (sem password - será criado via Better Auth)
     const [newUser] = await db
       .insert(users)
       .values({
+        id: userId,
         slug: finalSlug,
         name: ADMIN_NAME,
         email: ADMIN_EMAIL,
         emailVerified: true,
-        password: passwordHash,
         role: "admin",
         userType: "subscriber",
         isActive: true,
       })
       .returning()
+
+    // Criar conta com senha no Better Auth
+    console.log("🔐 Criando conta com senha...")
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10)
+    
+    await db
+      .insert(account)
+      .values({
+        id: createId(),
+        accountId: ADMIN_EMAIL,
+        providerId: "credential",
+        userId: userId,
+        password: passwordHash,
+      })
 
     console.log("✅ Usuário admin criado com sucesso!")
     console.log(`   ID: ${newUser.id}`)
