@@ -4,6 +4,7 @@ import { env } from "@/lib/env"
 import { db } from "@/lib/db"
 import { assinaturas, users } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { criarChaveParaAssinatura } from "@/lib/utils/criar-chave-assinatura"
 
 // Usar token do ambiente (.env.local = TESTE, .env = PRODUÇÃO)
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || env.MERCADOPAGO_ACCESS_TOKEN
@@ -57,6 +58,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
           }
 
+          // Se for admin, criar assinatura infinita (data_fim muito no futuro)
+          // Admins não recebem chave de ativação (o trigger já trata isso)
+          const isAdmin = user.role === "admin"
+          const finalExpirationDate = isAdmin 
+            ? new Date("2099-12-31T23:59:59") // Assinatura infinita para admin
+            : new Date(expirationDate)
+
           // Verificar se já existe assinatura
           const [existingSubscription] = await db
             .select()
@@ -69,12 +77,14 @@ export async function POST(request: NextRequest) {
             plano: planId,
             status: "ativa",
             dataInicio: new Date(),
-            dataFim: new Date(expirationDate),
+            dataFim: finalExpirationDate,
             valor: paymentInfo.transaction_amount ? Math.round(paymentInfo.transaction_amount * 100) : 0,
             renovacaoAutomatica: true,
             updatedAt: new Date(),
           }
 
+          // Criar ou atualizar assinatura
+          // O trigger no banco criará a chave automaticamente, mas vamos garantir aqui também
           if (existingSubscription) {
             // Atualizar assinatura existente
             await db
@@ -84,6 +94,23 @@ export async function POST(request: NextRequest) {
           } else {
             // Criar nova assinatura
             await db.insert(assinaturas).values(subscriptionData)
+          }
+
+          // Garantir que a chave foi criada apenas para usuários com role 'user'
+          // Admins não recebem chave (o trigger já trata isso, mas garantimos aqui também)
+          if (!isAdmin) {
+            const chaveResult = await criarChaveParaAssinatura(
+              userId,
+              finalExpirationDate
+            )
+
+            if (chaveResult.sucesso) {
+              console.log(`✅ Chave de ativação ${chaveResult.acao} para usuário ${userId}: ${chaveResult.chave}`)
+            } else {
+              console.warn(`⚠️  Aviso ao criar chave via webhook: ${chaveResult.erro} (trigger deve ter criado)`)
+            }
+          } else {
+            console.log(`✅ Assinatura infinita criada para admin ${userId} (sem chave de ativação)`)
           }
 
           console.log(`✅ Assinatura criada/atualizada para usuário ${userId}`)

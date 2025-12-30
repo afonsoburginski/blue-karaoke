@@ -38,6 +38,21 @@ export async function initLocalDb() {
       )
     `)
 
+    // Criar tabela de ativação
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS ativacao_local (
+        id TEXT PRIMARY KEY DEFAULT '1',
+        chave TEXT NOT NULL UNIQUE,
+        tipo TEXT NOT NULL,
+        dias_restantes INTEGER,
+        horas_restantes INTEGER,
+        data_expiracao INTEGER,
+        data_validacao INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+
     // Criar índices para melhor performance
     sqlite.exec(`
       CREATE INDEX IF NOT EXISTS idx_historico_codigo ON historico_local(codigo)

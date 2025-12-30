@@ -121,17 +121,44 @@ export default function DashboardPage() {
       }
 
       // Buscar novos usuários (apenas para admin)
-      if (userRole === "admin") {
-        fetch("/api/estatisticas/novos-usuarios?limit=5")
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.usuarios) {
-              setNewUsers(data.usuarios)
-            }
+      // Aguardar um pouco mais para garantir que a sessão está completamente carregada
+      if (userRole === "admin" && currentUser) {
+        // Usar um timeout separado para não bloquear o resto do código
+        const fetchTimeoutId = setTimeout(() => {
+          fetch("/api/estatisticas/novos-usuarios?limit=5", {
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
           })
-          .catch((error) => {
-            console.error("Erro ao buscar novos usuários:", error)
-          })
+            .then((res) => {
+              if (!res.ok) {
+                // Se for 401 ou 403, não tentar novamente
+                if (res.status === 401 || res.status === 403) {
+                  return null
+                }
+                throw new Error(`HTTP error! status: ${res.status}`)
+              }
+              return res.json()
+            })
+            .then((data) => {
+              if (data && data.usuarios) {
+                setNewUsers(data.usuarios)
+              }
+            })
+            .catch((error) => {
+              // Silenciar erros de rede durante o carregamento inicial
+              // Apenas logar se não for um erro de rede comum
+              if (error.name !== "TypeError" || !error.message?.includes("Failed to fetch")) {
+                console.error("Erro ao buscar novos usuários:", error)
+              }
+            })
+        }, 500) // Aguardar 500ms após o timeout inicial
+        
+        // Limpar timeout se o componente for desmontado
+        return () => {
+          clearTimeout(fetchTimeoutId)
+        }
       }
     }, 100) // Pequeno delay para garantir que a sessão está estável
 
@@ -150,8 +177,18 @@ export default function DashboardPage() {
 
   const handleUsersChange = useCallback(() => {
     if (user && user.role === "admin") {
-      fetch("/api/estatisticas/novos-usuarios?limit=5")
-        .then((res) => res.json())
+      fetch("/api/estatisticas/novos-usuarios?limit=5", {
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`)
+          }
+          return res.json()
+        })
         .then((data) => {
           if (data.usuarios) {
             setNewUsers(data.usuarios)
@@ -159,6 +196,7 @@ export default function DashboardPage() {
         })
         .catch((error) => {
           console.error("Erro ao buscar novos usuários:", error)
+          // Não mostrar erro ao usuário, apenas logar
         })
     }
     refetchStats()

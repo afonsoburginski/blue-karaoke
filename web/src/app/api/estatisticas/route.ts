@@ -56,14 +56,17 @@ export async function GET(request: NextRequest) {
       const totalGb = Math.round((totalGbResult[0]?.total || 0) / (1024 * 1024 * 1024))
 
       // Calcular receita mensal real: somar valores de assinaturas criadas no mês atual
+      // Excluir assinaturas de admins (role = 'admin')
       // Usar SQL direto para comparação de datas mais confiável
       const receitaQuery = await postgresClient`
-        SELECT COALESCE(SUM(valor), 0)::int as total
-        FROM assinaturas
+        SELECT COALESCE(SUM(a.valor), 0)::int as total
+        FROM assinaturas a
+        INNER JOIN users u ON u.id = a.user_id
         WHERE 
-          (status = 'ativa' OR status = 'pendente')
-          AND data_inicio >= DATE_TRUNC('month', CURRENT_DATE)
-          AND data_inicio < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+          (a.status = 'ativa' OR a.status = 'pendente')
+          AND u.role != 'admin'
+          AND a.data_inicio >= DATE_TRUNC('month', CURRENT_DATE)
+          AND a.data_inicio < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
       `
       
       const receitaMensal = Number(receitaQuery[0]?.total || 0)

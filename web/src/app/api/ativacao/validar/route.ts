@@ -130,23 +130,44 @@ export async function POST(request: NextRequest) {
       userData = user
     }
 
+    // Calcular dias restantes para chaves de assinatura
+    let diasRestantes: number | null = null
+    if (chaveData.tipo === "assinatura" && chaveData.dataExpiracao) {
+      const dataExpiracao = new Date(chaveData.dataExpiracao)
+      const diffTime = dataExpiracao.getTime() - now.getTime()
+      diasRestantes = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
+    }
+
+    // Calcular horas restantes para chaves de máquina
+    const horasRestantes =
+      chaveData.tipo === "maquina" && chaveData.limiteTempo && chaveData.dataInicio
+        ? Math.max(
+            0,
+            chaveData.limiteTempo -
+              (now.getTime() - new Date(chaveData.dataInicio).getTime()) /
+                (1000 * 60 * 60)
+          )
+        : null
+
+    // Atualizar último uso para chaves de assinatura
+    if (chaveData.tipo === "assinatura") {
+      await db
+        .update(chavesAtivacao)
+        .set({ ultimoUso: now })
+        .where(eq(chavesAtivacao.id, chaveData.id))
+    }
+
     return NextResponse.json({
       valida: true,
       chave: {
         id: chaveData.id,
+        chave: chaveData.chave,
         tipo: chaveData.tipo,
         limiteTempo: chaveData.limiteTempo,
         dataInicio: chaveData.dataInicio,
         dataExpiracao: chaveData.dataExpiracao,
-        horasRestantes:
-          chaveData.tipo === "maquina" && chaveData.limiteTempo && chaveData.dataInicio
-            ? Math.max(
-                0,
-                chaveData.limiteTempo -
-                  (now.getTime() - new Date(chaveData.dataInicio).getTime()) /
-                    (1000 * 60 * 60)
-              )
-            : null,
+        diasRestantes, // Dias restantes para assinatura
+        horasRestantes, // Horas restantes para máquina
       },
       user: userData
         ? {

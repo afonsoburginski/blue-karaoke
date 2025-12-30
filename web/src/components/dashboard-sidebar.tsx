@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter, usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import {
   Sidebar,
   SidebarContent,
@@ -20,14 +21,32 @@ import {
   History,
   LogOut,
   User,
+  CreditCard,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useAuth } from "@/hooks/use-auth"
 
 interface DashboardSidebarProps {
   userName?: string
   userEmail?: string
   slug?: string
   userRole?: string
+}
+
+interface SubscriptionData {
+  id: string
+  dataFim: string
+  isActive: boolean
+  chave?: string
 }
 
 export function DashboardSidebar({
@@ -38,6 +57,74 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const { user } = useAuth()
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(true)
+
+  useEffect(() => {
+    if (userRole === "user" && user?.id) {
+      const fetchSubscription = async () => {
+        try {
+          // Buscar assinatura
+          const subscriptionResponse = await fetch(`/api/assinaturas/check?userId=${user.id}`, {
+            credentials: "include",
+          })
+          
+          if (subscriptionResponse.ok) {
+            const subscriptionData = await subscriptionResponse.json()
+            if (subscriptionData.hasSubscription && subscriptionData.subscription?.isActive) {
+              // Buscar chave de ativação
+              try {
+                const keyResponse = await fetch(`/api/assinaturas/chave?userId=${user.id}`, {
+                  credentials: "include",
+                })
+                let chave: string | undefined
+                
+                if (keyResponse.ok) {
+                  const keyData = await keyResponse.json()
+                  chave = keyData.chave
+                }
+                
+                setSubscription({
+                  id: subscriptionData.subscription.id,
+                  dataFim: subscriptionData.subscription.dataFim,
+                  isActive: subscriptionData.subscription.isActive,
+                  chave,
+                })
+              } catch (keyError) {
+                // Se não encontrar chave, usar ID formatado como fallback
+                setSubscription({
+                  id: subscriptionData.subscription.id,
+                  dataFim: subscriptionData.subscription.dataFim,
+                  isActive: subscriptionData.subscription.isActive,
+                })
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Erro ao buscar assinatura:", error)
+        } finally {
+          setIsLoadingSubscription(false)
+        }
+      }
+      fetchSubscription()
+    } else {
+      setIsLoadingSubscription(false)
+    }
+  }, [userRole, user?.id])
+
+  const calculateDaysRemaining = (dataFim: string): number => {
+    const endDate = new Date(dataFim)
+    const now = new Date()
+    const diffTime = endDate.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return Math.max(0, diffDays)
+  }
+
+  const formatSubscriptionKey = (id: string): string => {
+    // Formatar o ID da assinatura como chave (primeiros 8 caracteres + últimos 4)
+    return `${id.substring(0, 8).toUpperCase()}-${id.substring(id.length - 4).toUpperCase()}`
+  }
 
   const handleLogout = async () => {
     try {
@@ -163,35 +250,84 @@ export function DashboardSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Card de Assinatura - Apenas para usuários com role "user" */}
+        {userRole === "user" && !isLoadingSubscription && subscription && (
+          <SidebarGroup className="mt-4">
+            <SidebarGroupContent>
+              <Card className="border-sidebar-border bg-sidebar-accent/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" />
+                    Assinatura
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Chave</p>
+                    <p className="text-xs font-mono font-semibold text-foreground break-all">
+                      {subscription.chave || formatSubscriptionKey(subscription.id)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Dias restantes</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {calculateDaysRemaining(subscription.dataFim)} dias
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <div className="flex items-center gap-2 px-2 py-1.5">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>{getInitials()}</AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">
-                    {userName || "Usuário"}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {userEmail || ""}
-                  </span>
-                </div>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={handleLogout}
-              tooltip="Sair"
-              className="text-destructive hover:text-destructive"
-            >
-              <LogOut />
-              <span>Sair</span>
-            </SidebarMenuButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton size="lg" className="w-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>{getInitials()}</AvatarFallback>
+                  </Avatar>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">
+                      {userName || "Usuário"}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {userEmail || ""}
+                    </span>
+                  </div>
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" side="top">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {userName || "Usuário"}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {userEmail || ""}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <a href={slug ? `/${slug}/perfil` : "/perfil"} className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Perfil</span>
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sair</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

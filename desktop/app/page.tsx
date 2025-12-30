@@ -7,6 +7,10 @@ import { Spotlight } from "@/components/ui/spotlight-new"
 import { QRCodeSVG } from "qrcode.react"
 import { useAutoSync } from "@/hooks/useAutoSync"
 import { UploadDialog } from "@/components/upload-dialog"
+import { AtivacaoDialog } from "@/components/ativacao-dialog"
+import { useAtivacao } from "@/hooks/use-ativacao"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Calendar, Clock, AlertCircle } from "lucide-react"
 
 export default function HomePage() {
   const [codigo, setCodigo] = useState("")
@@ -14,12 +18,40 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [qrValue, setQrValue] = useState("https://bluekaraoke.com")
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [ativacaoDialogOpen, setAtivacaoDialogOpen] = useState(false)
   const router = useRouter()
+  const { status: ativacaoStatus, verificar: verificarAtivacao } = useAtivacao()
   
   // Sincronização automática desabilitada em desenvolvimento
   // useAutoSync(30, false) // Desabilitado - só executa manualmente
 
+  // Verificar ativação ao carregar
+  useEffect(() => {
+    if (ativacaoStatus.modo === "loading") {
+      return
+    }
+
+    // Se não estiver ativado ou estiver expirado, mostrar diálogo
+    if (!ativacaoStatus.ativada || ativacaoStatus.expirada) {
+      setAtivacaoDialogOpen(true)
+    }
+  }, [ativacaoStatus])
+
+  const handleAtivacaoSucesso = useCallback(() => {
+    verificarAtivacao()
+  }, [verificarAtivacao])
+
   const handleSubmit = useCallback(async () => {
+    // Verificar se está ativado antes de permitir uso
+    if (ativacaoStatus.modo === "loading") {
+      return // Aguardar verificação
+    }
+    
+    if (!ativacaoStatus.ativada || ativacaoStatus.expirada) {
+      setAtivacaoDialogOpen(true)
+      return
+    }
+
     if (isLoading || codigo.length !== 5) return
 
     setIsLoading(true)
@@ -46,7 +78,7 @@ export default function HomePage() {
         setIsLoading(false)
       }, 2000)
     }
-  }, [codigo, isLoading, router])
+  }, [codigo, isLoading, router, ativacaoStatus])
 
   useEffect(() => {
     // Set QR code value after hydration to avoid mismatch
@@ -57,6 +89,17 @@ export default function HomePage() {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Bloquear input se não estiver ativado
+      if (!ativacaoStatus.ativada || ativacaoStatus.expirada) {
+        if (e.key !== "Escape") {
+          e.preventDefault()
+        }
+        if (e.key === "Enter" || (e.key >= "0" && e.key <= "9")) {
+          setAtivacaoDialogOpen(true)
+        }
+        return
+      }
+
       // Only accept numeric keys 0-9
       if (e.key >= "0" && e.key <= "9") {
         if (codigo.length < 5 && !error && !isLoading) {
@@ -90,7 +133,7 @@ export default function HomePage() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [codigo, error, isLoading, handleSubmit])
+  }, [codigo, error, isLoading, handleSubmit, ativacaoStatus])
 
   return (
     <main className="min-h-screen relative overflow-hidden bg-black">
@@ -126,6 +169,29 @@ export default function HomePage() {
       {/* Conteúdo principal */}
       <div className="relative z-10 min-h-screen flex items-center justify-center p-8">
         <div className="max-w-3xl w-full space-y-12">
+          {/* Status de Ativação */}
+          {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
+            <div className="flex justify-center">
+              <Alert className="max-w-md border-green-500/50 bg-green-500/10">
+                <div className="flex items-center gap-2">
+                  {ativacaoStatus.diasRestantes !== null ? (
+                    <Calendar className="h-4 w-4 text-green-400" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-green-400" />
+                  )}
+                  <AlertDescription className="text-green-300">
+                    {ativacaoStatus.diasRestantes !== null
+                      ? `${ativacaoStatus.diasRestantes} dias restantes`
+                      : ativacaoStatus.horasRestantes !== null
+                        ? `${Math.floor(ativacaoStatus.horasRestantes)} horas restantes`
+                        : "Sistema ativado"}
+                    {ativacaoStatus.modo === "offline" && " (modo offline)"}
+                  </AlertDescription>
+                </div>
+              </Alert>
+            </div>
+          )}
+
           {/* Título */}
           <div className="text-center space-y-3">
             <h1 className="text-3xl md:text-4xl text-white/95 font-semibold tracking-wide">
@@ -136,7 +202,11 @@ export default function HomePage() {
 
           {/* Input de código com 5 dígitos */}
           <div className="flex justify-center">
-            <div className="inline-flex gap-3 p-8 rounded-3xl bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border border-white/10 shadow-2xl">
+            <div className={`inline-flex gap-3 p-8 rounded-3xl bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border border-white/10 shadow-2xl ${
+              (!ativacaoStatus.ativada || ativacaoStatus.expirada) && ativacaoStatus.modo !== "loading"
+                ? "opacity-50 pointer-events-none"
+                : ""
+            }`}>
               {[0, 1, 2, 3, 4].map((index) => {
                 const hasValue = codigo[index]
 
@@ -184,6 +254,11 @@ export default function HomePage() {
       </div>
 
       <UploadDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} />
+      <AtivacaoDialog
+        open={ativacaoDialogOpen}
+        onOpenChange={setAtivacaoDialogOpen}
+        onAtivacaoSucesso={handleAtivacaoSucesso}
+      />
     </main>
   )
 }

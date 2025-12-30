@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { assinaturas } from "@/lib/db/schema"
+import { assinaturas, users } from "@/lib/db/schema"
 import { eq, desc } from "drizzle-orm"
 import { getCurrentUser } from "@/lib/auth"
 
@@ -17,6 +17,28 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get("userId") || currentUser.userId
+
+    // Verificar role do usuário
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    // Se for admin, sempre considerar como tendo assinatura ativa (infinita)
+    if (user && user.role === "admin") {
+      return NextResponse.json({
+        hasSubscription: true,
+        subscription: {
+          id: "admin-infinite",
+          plano: "admin",
+          status: "ativa",
+          dataInicio: new Date(),
+          dataFim: new Date("2099-12-31T23:59:59"), // Assinatura infinita
+          isActive: true,
+        },
+      })
+    }
 
     // Buscar assinatura mais recente do usuário
     const [subscription] = await db
@@ -37,9 +59,11 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const dataFim = new Date(subscription.dataFim)
     // Assinatura está ativa se: status é "ativa" ou "pendente" E data_fim é maior que agora
+    // Ou se data_fim for muito no futuro (assinatura infinita para admin)
+    const isInfinite = dataFim.getTime() > new Date("2090-01-01").getTime()
     const isActive = 
       (subscription.status === "ativa" || subscription.status === "pendente") && 
-      dataFim.getTime() > now.getTime()
+      (isInfinite || dataFim.getTime() > now.getTime())
 
     return NextResponse.json({
       hasSubscription: true,
