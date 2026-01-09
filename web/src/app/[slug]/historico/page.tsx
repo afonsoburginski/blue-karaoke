@@ -28,6 +28,7 @@ import {
 import { History, Music, Calendar, Clock, Play } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useRealtimeHistorico } from "@/hooks/use-realtime-historico"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface HistoryEntry {
   id: string
@@ -71,31 +72,34 @@ export default function HistoricoPage() {
 
   useEffect(() => {
     // Não fazer nada enquanto está carregando
-    if (authLoading) {
-      return
-    }
+    if (authLoading) return
 
-    if (!user) {
-      router.push("/login")
-      return
-    }
-
-    // Verificar se é admin - apenas admins podem acessar histórico
-    if (user.role !== "admin") {
-      // Usuários com role "user" não podem acessar histórico
-      // Redirecionar para o perfil
-      if (user.slug) {
-        router.push(`/${user.slug}/perfil`)
-      } else {
+    // Aguardar um pouco para garantir que a sessão foi carregada
+    const timeoutId = setTimeout(() => {
+      if (!user) {
         router.push("/login")
+        return
       }
-      return
-    }
 
-    if (slug && user.slug !== slug) {
-      router.push(`/${user.slug}/historico`)
-      return
-    }
+      // Verificar se é admin - apenas admins podem acessar histórico
+      if (user.role !== "admin") {
+        // Usuários com role "user" não podem acessar histórico
+        // Redirecionar para o perfil
+        if (user.slug) {
+          router.push(`/${user.slug}/perfil`)
+        } else {
+          router.push("/login")
+        }
+        return
+      }
+
+      if (slug && user.slug && user.slug !== slug) {
+        router.push(`/${user.slug}/historico`)
+        return
+      }
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
   }, [user, slug, authLoading, router])
 
   const fetchHistory = useCallback(async () => {
@@ -243,68 +247,14 @@ export default function HistoricoPage() {
             </Card>
           </div>
 
-          {/* Mais Tocadas */}
-          {mostPlayed.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Mais Tocadas</CardTitle>
-                <CardDescription>
-                  Suas músicas mais reproduzidas
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">#</TableHead>
-                      <TableHead>Música</TableHead>
-                      <TableHead>Artista</TableHead>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Duração</TableHead>
-                      <TableHead className="text-right">Vezes Tocada</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {mostPlayed.map((item, index) => (
-                      <TableRow key={item.musicaId}>
-                        <TableCell className="font-medium">{index + 1}</TableCell>
-                        <TableCell>
-                          <div className="font-medium">{item.titulo}</div>
-                        </TableCell>
-                        <TableCell>{item.artista}</TableCell>
-                        <TableCell>
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {item.codigo}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-muted-foreground" />
-                            {formatDuration(item.duracao)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Play className="h-3 w-3 text-muted-foreground" />
-                            {item.vezesTocada}x
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Tabela de Histórico */}
+          {/* Tabs com as duas tabelas */}
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <CardTitle>Histórico de Reproduções</CardTitle>
                   <CardDescription>
-                    Registro de todas as músicas tocadas
+                    Visualize o histórico completo e as músicas mais tocadas
                   </CardDescription>
                 </div>
                 <Select
@@ -324,73 +274,145 @@ export default function HistoricoPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
-                <div className="text-center py-8">
-                  <div className="text-muted-foreground">Carregando...</div>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">#</TableHead>
-                      <TableHead>Música</TableHead>
-                      <TableHead>Artista</TableHead>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Data/Hora</TableHead>
-                      <TableHead>Duração</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {history.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
-                          <div className="flex flex-col items-center gap-2">
-                            <History className="h-12 w-12 text-muted-foreground opacity-50" />
-                            <p className="text-sm text-muted-foreground">
-                              Nenhuma música tocada ainda
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Seu histórico de reproduções aparecerá aqui
-                            </p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      history.map((entry, index) => {
-                        const { date, time } = formatDateTime(entry.dataExecucao)
-                        return (
-                          <TableRow key={entry.id}>
-                            <TableCell className="font-medium">{index + 1}</TableCell>
-                            <TableCell>
-                              <div className="font-medium">
-                                {entry.musica?.titulo || "Música não encontrada"}
+              <Tabs defaultValue="historico" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="historico" className="flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    Histórico Completo
+                  </TabsTrigger>
+                  <TabsTrigger value="mais-tocadas" className="flex items-center gap-2">
+                    <Music className="h-4 w-4" />
+                    Mais Tocadas
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="historico" className="mt-4">
+                  {isLoading ? (
+                    <div className="text-center py-8">
+                      <div className="text-muted-foreground">Carregando...</div>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">#</TableHead>
+                          <TableHead>Música</TableHead>
+                          <TableHead>Artista</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Data/Hora</TableHead>
+                          <TableHead>Duração</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {history.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-8">
+                              <div className="flex flex-col items-center gap-2">
+                                <History className="h-12 w-12 text-muted-foreground opacity-50" />
+                                <p className="text-sm text-muted-foreground">
+                                  Nenhuma música tocada ainda
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Seu histórico de reproduções aparecerá aqui
+                                </p>
                               </div>
                             </TableCell>
+                          </TableRow>
+                        ) : (
+                          history.map((entry, index) => {
+                            const { date, time } = formatDateTime(entry.dataExecucao)
+                            return (
+                              <TableRow key={entry.id}>
+                                <TableCell className="font-medium">{index + 1}</TableCell>
+                                <TableCell>
+                                  <div className="font-medium">
+                                    {entry.musica?.titulo || "Música não encontrada"}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {entry.musica?.artista || "Artista desconhecido"}
+                                </TableCell>
+                                <TableCell>
+                                  <code className="text-xs bg-muted px-2 py-1 rounded">
+                                    {entry.codigo}
+                                  </code>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-sm">{date}</div>
+                                  <div className="text-xs text-muted-foreground">{time}</div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3 text-muted-foreground" />
+                                    {formatDuration(entry.musica?.duracao || null)}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  )}
+                </TabsContent>
+                
+                <TabsContent value="mais-tocadas" className="mt-4">
+                  {mostPlayed.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="flex flex-col items-center gap-2">
+                        <Music className="h-12 w-12 text-muted-foreground opacity-50" />
+                        <p className="text-sm text-muted-foreground">
+                          Nenhuma música tocada ainda
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          As músicas mais tocadas aparecerão aqui
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">#</TableHead>
+                          <TableHead>Música</TableHead>
+                          <TableHead>Artista</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Duração</TableHead>
+                          <TableHead className="text-right">Vezes Tocada</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {mostPlayed.map((item, index) => (
+                          <TableRow key={item.musicaId}>
+                            <TableCell className="font-medium">{index + 1}</TableCell>
                             <TableCell>
-                              {entry.musica?.artista || "Artista desconhecido"}
+                              <div className="font-medium">{item.titulo}</div>
                             </TableCell>
+                            <TableCell>{item.artista}</TableCell>
                             <TableCell>
                               <code className="text-xs bg-muted px-2 py-1 rounded">
-                                {entry.codigo}
+                                {item.codigo}
                               </code>
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-sm">{date}</div>
-                              <div className="text-xs text-muted-foreground">{time}</div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
                                 <Clock className="h-3 w-3 text-muted-foreground" />
-                                {formatDuration(entry.musica?.duracao || null)}
+                                {formatDuration(item.duracao)}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Play className="h-3 w-3 text-muted-foreground" />
+                                {item.vezesTocada}x
                               </div>
                             </TableCell>
                           </TableRow>
-                        )
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              )}
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>

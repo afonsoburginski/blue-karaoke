@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sidebar"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -25,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Users, Music, HardDrive, DollarSign, TrendingUp } from "lucide-react"
+import { Users, Music, HardDrive, DollarSign, TrendingUp, ArrowRight } from "lucide-react"
 import { useStorageUsage } from "@/hooks/use-storage-usage"
 import { useDashboardStats } from "@/hooks/use-dashboard-stats"
 import { useTopMusics } from "@/hooks/use-top-musics"
@@ -386,9 +387,20 @@ export default function DashboardPage() {
 
             {/* Novos Usuários */}
             <Card>
-              <CardHeader>
-                <CardTitle>Novos Usuários</CardTitle>
-                <CardDescription>Usuários cadastrados recentemente</CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between">
+                <div>
+                  <CardTitle>Novos Usuários</CardTitle>
+                  <CardDescription>Usuários cadastrados recentemente</CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push(`/${slug}/admin/usuarios`)}
+                  className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                >
+                  Ver todos
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               </CardHeader>
               <CardContent>
                 <Table>

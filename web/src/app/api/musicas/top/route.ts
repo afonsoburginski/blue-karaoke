@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db, historico, musicas } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { eq, desc, sql, count } from "drizzle-orm"
+import { eq, desc, sql } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,28 +14,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const searchParams = request.nextUrl.searchParams
-    const period = searchParams.get("period") || "week" // week, month, year
-
-    // Calcular data de início baseado no período
-    const now = new Date()
-    let startDate: Date
-
-    switch (period) {
-      case "week":
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        break
-      case "month":
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        break
-      case "year":
-        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
-        break
-      default:
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    }
-
-    // Buscar músicas mais tocadas
+    // Buscar todas as músicas mais tocadas (sem filtro de data por enquanto)
+    // TODO: Implementar filtro por período quando houver dados suficientes
     const topMusicsQuery = await db
       .select({
         musicaId: historico.musicaId,
@@ -46,7 +26,6 @@ export async function GET(request: NextRequest) {
       })
       .from(historico)
       .leftJoin(musicas, eq(historico.musicaId, musicas.id))
-      .where(sql`${historico.dataExecucao} >= ${startDate.toISOString()}`)
       .groupBy(historico.musicaId, historico.codigo, musicas.titulo, musicas.artista)
       .orderBy(desc(sql`count(*)`))
       .limit(10)

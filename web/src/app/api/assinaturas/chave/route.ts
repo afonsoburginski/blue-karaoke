@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { chavesAtivacao, assinaturas } from "@/lib/db/schema"
+import { chavesAtivacao, assinaturas, users } from "@/lib/db/schema"
 import { eq, and, desc } from "drizzle-orm"
 import { getCurrentUser } from "@/lib/auth"
 
@@ -17,6 +17,23 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get("userId") || currentUser.userId
+
+    // Verificar role do usuário
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    // Se for admin, retornar sucesso sem chave (admin não precisa de chave)
+    if (user && user.role === "admin") {
+      return NextResponse.json({
+        chave: null,
+        dataExpiracao: null,
+        status: "ativa",
+        isAdmin: true,
+      })
+    }
 
     // Verificar se o usuário tem assinatura ativa
     const [subscription] = await db

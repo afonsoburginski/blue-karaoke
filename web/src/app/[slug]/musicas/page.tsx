@@ -335,35 +335,65 @@ export default function MusicasPage() {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("filename", file.name)
 
       try {
-        await new Promise<void>((resolve) => {
-          let progress = 0
-          const interval = setInterval(() => {
-            progress += 10
-            setUploadProgress((prev) => ({ ...prev, [i]: progress }))
-            if (progress >= 100) {
-              clearInterval(interval)
+        // Criar FormData para enviar o arquivo
+        const formData = new FormData()
+        formData.append("file", file)
+
+        // Usar XMLHttpRequest para ter progresso real
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          
+          xhr.upload.addEventListener("progress", (event) => {
+            if (event.lengthComputable) {
+              const percentComplete = Math.round((event.loaded / event.total) * 100)
+              setUploadProgress((prev) => ({ ...prev, [i]: percentComplete }))
+            }
+          })
+
+          xhr.addEventListener("load", () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
               setUploadedFiles((prev) => new Set([...prev, i.toString()]))
               resolve()
+            } else {
+              try {
+                const errorData = JSON.parse(xhr.responseText)
+                reject(new Error(errorData.error || "Erro ao fazer upload"))
+              } catch {
+                reject(new Error(`Erro ${xhr.status}: ${xhr.statusText}`))
+              }
             }
-          }, 200)
-        })
+          })
 
-        const response = await fetch("/api/musicas")
-        if (response.ok) {
-          const data = await response.json()
-          setMusics(data.musicas || [])
-        }
+          xhr.addEventListener("error", () => {
+            reject(new Error("Erro de rede ao fazer upload"))
+          })
+
+          xhr.addEventListener("abort", () => {
+            reject(new Error("Upload cancelado"))
+          })
+
+          xhr.open("POST", "/api/upload")
+          xhr.send(formData)
+        })
       } catch (error) {
         setErrors((prev) => ({
           ...prev,
           [i]: error instanceof Error ? error.message : "Erro ao fazer upload",
         }))
       }
+    }
+
+    // Atualizar lista de músicas
+    try {
+      const response = await fetch("/api/musicas")
+      if (response.ok) {
+        const data = await response.json()
+        setMusics(data.musicas || [])
+      }
+    } catch (error) {
+      console.error("Erro ao atualizar lista de músicas:", error)
     }
 
     setUploading(false)

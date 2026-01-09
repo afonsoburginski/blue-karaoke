@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db, historico, musicas } from "@/lib/db"
+import { db, historico, musicas, users } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { eq, desc, and, sql } from "drizzle-orm"
 
@@ -14,17 +14,27 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Buscar usuário completo para verificar role
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.userId))
+      .limit(1)
+
     const searchParams = request.nextUrl.searchParams
     const limit = parseInt(searchParams.get("limit") || "50")
     const filter = searchParams.get("filter") // today, week, month, all
 
     // Build where conditions
-    const whereConditions = [eq(historico.userId, currentUser.userId)]
+    // Se for admin, não filtrar por userId (ver todo o histórico)
+    const whereConditions = user?.role === "admin" 
+      ? [] 
+      : [eq(historico.userId, currentUser.userId)]
 
     // Note: Date filtering is done client-side below since Drizzle doesn't have direct date comparison support
     // The where clause only filters by userId
 
-    const query = db
+    let query = db
       .select({
         id: historico.id,
         userId: historico.userId,
@@ -40,7 +50,10 @@ export async function GET(request: NextRequest) {
       })
       .from(historico)
       .leftJoin(musicas, eq(historico.musicaId, musicas.id))
-      .where(and(...whereConditions))
+
+    if (whereConditions.length > 0) {
+      query = query.where(and(...whereConditions)) as any
+    }
 
     const history = await query.orderBy(desc(historico.dataExecucao)).limit(limit)
 
@@ -70,7 +83,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar músicas mais tocadas (agregado)
-    const mostPlayedQuery = await db
+    // Se for admin, buscar de todos os usuários, senão apenas do usuário atual
+    let mostPlayedQuery = db
       .select({
         musicaId: historico.musicaId,
         codigo: historico.codigo,
@@ -81,12 +95,17 @@ export async function GET(request: NextRequest) {
       })
       .from(historico)
       .leftJoin(musicas, eq(historico.musicaId, musicas.id))
-      .where(eq(historico.userId, currentUser.userId))
+
+    if (user?.role !== "admin") {
+      mostPlayedQuery = mostPlayedQuery.where(eq(historico.userId, currentUser.userId)) as any
+    }
+
+    const mostPlayed = await mostPlayedQuery
       .groupBy(historico.musicaId, historico.codigo, musicas.titulo, musicas.artista, musicas.duracao)
       .orderBy(desc(sql`count(*)`))
       .limit(10)
 
-    const mostPlayed = mostPlayedQuery.map(item => ({
+    const mostPlayedMapped = mostPlayed.map(item => ({
       musicaId: item.musicaId,
       codigo: item.codigo,
       vezesTocada: Number(item.vezesTocada),
@@ -97,7 +116,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ 
       historico: filteredHistory,
-      maisTocadas: mostPlayed
+      maisTocadas: mostPlayedMapped
     })
   } catch (error) {
     console.error("Erro ao buscar histórico:", error)

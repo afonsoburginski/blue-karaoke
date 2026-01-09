@@ -1,4 +1,4 @@
-import { S3Client, ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { env } from "./env"
 
 // Cliente S3 compatível com Cloudflare R2
@@ -106,4 +106,53 @@ export async function getR2Object(key: string) {
   })
 
   return await r2Client.send(command)
+}
+
+export interface UploadResult {
+  key: string
+  url: string
+  size: number
+}
+
+/**
+ * Faz upload de um arquivo para o R2
+ * @param file Buffer do arquivo
+ * @param filename Nome do arquivo (será salvo em musicas/)
+ * @param contentType MIME type do arquivo
+ * @returns Resultado do upload com key e URL pública
+ */
+export async function uploadToR2(
+  file: Buffer,
+  filename: string,
+  contentType: string
+): Promise<UploadResult> {
+  const key = getR2Key(filename)
+
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key,
+    Body: file,
+    ContentType: contentType,
+  })
+
+  await r2Client.send(command)
+
+  return {
+    key,
+    url: getR2PublicUrl(filename),
+    size: file.length,
+  }
+}
+
+/**
+ * Remove um objeto do R2
+ * @param key Key do objeto no R2 (ex: "musicas/01587.mp4")
+ */
+export async function deleteFromR2(key: string): Promise<void> {
+  const command = new DeleteObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key,
+  })
+
+  await r2Client.send(command)
 }

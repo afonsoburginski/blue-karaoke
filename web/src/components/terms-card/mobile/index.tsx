@@ -52,7 +52,7 @@ export function TermsCard() {
   }
 
   return (
-    <Card className="w-full max-w-sm bg-white shadow-xl rounded-xl">
+    <Card className="w-full max-w-sm bg-white/75 backdrop-blur-sm shadow-xl rounded-xl dark:bg-white/75">
       <CardContent className="p-5">
         {/* Logo */}
         <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-black text-white">
@@ -60,18 +60,18 @@ export function TermsCard() {
         </div>
 
         {/* Title */}
-        <h1 className="mb-4 text-xl font-normal text-foreground">
+        <h1 className="mb-4 text-xl font-normal text-gray-900">
           Está <em className="font-serif italic">quase</em> lá
         </h1>
 
         {/* Description */}
-        <p className="mb-5 text-xs text-muted-foreground leading-relaxed">
+        <p className="mb-5 text-xs text-gray-600 leading-relaxed">
           Para continuar, aceite nossos{" "}
-          <a href="#" className="text-foreground underline hover:no-underline">
+          <a href="#" className="text-gray-900 underline hover:no-underline">
             Termos de Serviço
           </a>
           , e declare estar ciente da nossa{" "}
-          <a href="#" className="text-foreground underline hover:no-underline">
+          <a href="#" className="text-gray-900 underline hover:no-underline">
             Política de Privacidade
           </a>
           .
