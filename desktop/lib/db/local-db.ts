@@ -32,3 +32,5 @@ export const localDb = drizzle(sqlite, { schema })
 // Exportar o caminho do banco e a instância SQLite para uso externo
 export { dbPath, sqlite }
 
+// Re-exportar schemas para facilitar importações
+export { musicasLocal, historicoLocal, ativacaoLocal } from "./local-schema"

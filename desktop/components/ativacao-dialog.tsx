@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, CheckCircle2, XCircle, Calendar, Clock } from "lucide-react"
-import { validarChaveOnline, verificarAtivacaoOffline } from "@/lib/ativacao"
 import { validarFormatoChave, normalizarChave } from "@/lib/utils/chave-ativacao"
 
 interface AtivacaoDialogProps {
@@ -53,7 +52,21 @@ export function AtivacaoDialog({
     setSuccess(false)
 
     try {
-      const resultado = await validarChaveOnline(chaveNormalizada)
+      const response = await fetch("/api/ativacao/validar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ chave: chaveNormalizada }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }))
+        setError(errorData.error || "Chave de ativação inválida")
+        return
+      }
+
+      const resultado = await response.json()
 
       if (resultado.valida && resultado.chave) {
         setSuccess(true)
@@ -106,6 +119,13 @@ export function AtivacaoDialog({
               value={chave}
               onChange={(e) => {
                 setChave(e.target.value.toUpperCase())
+                setError(null)
+              }}
+              onPaste={(e) => {
+                e.preventDefault()
+                const pastedText = e.clipboardData.getData("text")
+                const normalized = normalizarChave(pastedText)
+                setChave(normalized)
                 setError(null)
               }}
               disabled={isLoading || success}

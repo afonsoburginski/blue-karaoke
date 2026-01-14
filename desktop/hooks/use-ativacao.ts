@@ -1,8 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { verificarAtivacao, verificarAtivacaoOffline } from "@/lib/ativacao"
-import { ensureLocalDbInitialized } from "@/lib/db/auto-init"
+import { useState, useEffect, useCallback, useRef } from "react"
 
 export interface AtivacaoStatus {
   ativada: boolean
@@ -11,6 +9,7 @@ export interface AtivacaoStatus {
   expirada: boolean
   modo: "online" | "offline" | "loading"
   chave?: string
+  tipo?: "assinatura" | "maquina" | null
 }
 
 export function useAtivacao() {
@@ -21,26 +20,58 @@ export function useAtivacao() {
     expirada: false,
     modo: "loading",
   })
+  const initialLoadDone = useRef(false)
 
-  const verificar = useCallback(async () => {
+  // Verificação rápida offline (instantânea)
+  const verificarOfflineRapido = useCallback(async () => {
     try {
-      // Garantir que o banco está inicializado
-      await ensureLocalDbInitialized()
-      
-      const resultado = await verificarAtivacao()
-      setStatus(resultado)
-    } catch (error) {
-      console.error("Erro ao verificar ativação:", error)
-      // Em caso de erro, tenta verificar offline
-      try {
-        await ensureLocalDbInitialized()
-        const offline = await verificarAtivacaoOffline()
-        setStatus({
-          ...offline,
-          modo: "offline",
-        })
-      } catch (offlineError) {
-        console.error("Erro ao verificar ativação offline:", offlineError)
+      const response = await fetch("/api/ativacao/offline")
+      if (response.ok) {
+        const offline = await response.json()
+        return { ...offline, modo: "offline" as const }
+      }
+    } catch {
+      // Silently fail
+    }
+    return null
+  }, [])
+
+  // Verificação completa online (background)
+  const verificarOnline = useCallback(async () => {
+    try {
+      const response = await fetch("/api/ativacao/verificar")
+      if (response.ok) {
+        const resultado = await response.json()
+        setStatus(resultado)
+      }
+    } catch {
+      // Silently fail - keep offline data
+    }
+  }, [])
+
+  // Verificação pública (para revalidar após ativação)
+  const verificar = useCallback(async () => {
+    // Primeiro carrega offline (rápido)
+    const offlineStatus = await verificarOfflineRapido()
+    if (offlineStatus) {
+      setStatus(offlineStatus)
+    }
+    // Depois valida online em background
+    await verificarOnline()
+  }, [verificarOfflineRapido, verificarOnline])
+
+  useEffect(() => {
+    if (initialLoadDone.current) return
+    initialLoadDone.current = true
+
+    // Carregamento inicial: offline primeiro, depois online em background
+    const load = async () => {
+      // 1. Carrega dados offline imediatamente (< 50ms)
+      const offlineStatus = await verificarOfflineRapido()
+      if (offlineStatus) {
+        setStatus(offlineStatus)
+      } else {
+        // Se não há dados offline, marca como não ativado
         setStatus({
           ativada: false,
           diasRestantes: null,
@@ -49,17 +80,18 @@ export function useAtivacao() {
           modo: "offline",
         })
       }
-    }
-  }, [])
 
-  useEffect(() => {
-    verificar()
+      // 2. Valida online em background (não bloqueia UI)
+      verificarOnline()
+    }
+
+    load()
     
     // Verificar periodicamente (a cada 1 hora)
-    const interval = setInterval(verificar, 60 * 60 * 1000)
+    const interval = setInterval(verificarOnline, 60 * 60 * 1000)
     
     return () => clearInterval(interval)
-  }, [verificar])
+  }, [verificarOfflineRapido, verificarOnline])
 
   return {
     status,

@@ -46,9 +46,22 @@ module.exports = {
     category: "public.app-category.music",
   },
   linux: {
-    target: ["AppImage"],
+    target: ["AppImage", "deb", "rpm"],
     icon: "public/icon.png",
     category: "AudioVideo",
+    desktop: {
+      Name: "Blue Karaoke",
+      Comment: "Sistema de Karaokê",
+      Categories: "AudioVideo;Audio;Music;",
+      StartupWMClass: "blue-karaoke",
+    },
+  },
+  deb: {
+    depends: ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1"],
+    packageCategory: "sound",
+  },
+  rpm: {
+    depends: ["gtk3", "libnotify", "nss", "libXScrnSaver", "libXtst", "xdg-utils", "at-spi2-core", "libuuid"],
   },
 }
 

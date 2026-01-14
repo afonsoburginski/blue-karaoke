@@ -2,96 +2,103 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 
+interface OfflineStatus {
+  totalMusicas: number
+  musicasOffline: number
+  musicasOnline: number
+  storageUsed: number
+  storageUsedMB: number
+}
+
 interface SyncStatus {
   isOnline: boolean
   isSyncing: boolean
+  isDownloading: boolean
   lastSync: Date | null
   error: string | null
-  downloaded: number
   message: string | null
-  availableCount: number
-  showPermissionDialog: boolean
+  offline: OfflineStatus
+  downloadProgress: {
+    current: number
+    total: number
+    currentMusica: string
+  } | null
 }
 
-export function useAutoSync(intervalMinutes: number = 30) {
+interface UseAutoSyncOptions {
+  intervalMinutes?: number
+  isActivated?: boolean  // Se o usuário tem chave válida
+}
+
+export function useAutoSync(options: UseAutoSyncOptions = {}) {
+  const { intervalMinutes = 30, isActivated = false } = options
+  
   const [status, setStatus] = useState<SyncStatus>({
     isOnline: typeof navigator !== "undefined" ? navigator.onLine : false,
     isSyncing: false,
+    isDownloading: false,
     lastSync: null,
     error: null,
-    downloaded: 0,
     message: null,
-    availableCount: 0,
-    showPermissionDialog: false,
+    offline: {
+      totalMusicas: 0,
+      musicasOffline: 0,
+      musicasOnline: 0,
+      storageUsed: 0,
+      storageUsedMB: 0,
+    },
+    downloadProgress: null,
   })
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const isInitialSyncRef = useRef(false)
-  const lastDeniedRef = useRef<Date | null>(null)
 
-  // Verificar se há novas músicas disponíveis
-  const checkForNewMusic = useCallback(async () => {
-    // Não verificar se o usuário negou recentemente (aguardar 1 hora)
-    if (lastDeniedRef.current) {
-      const timeSinceDenied = Date.now() - lastDeniedRef.current.getTime()
-      const oneHour = 60 * 60 * 1000
-      if (timeSinceDenied < oneHour) {
-        return // Ainda está no período de cooldown
-      }
-    }
-
+  // Verificar status offline
+  const checkOfflineStatus = useCallback(async () => {
     try {
       const response = await fetch("/api/sync", { method: "GET" })
       if (!response.ok) return
 
       const data = await response.json()
-      const available = data.available || 0
-
-      if (available > 0) {
-        setStatus((prev) => {
-          // Só mostrar se não estiver sincronizando e o diálogo não estiver aberto
-          if (prev.isSyncing || prev.showPermissionDialog) return prev
-          return {
-            ...prev,
-            availableCount: available,
-            showPermissionDialog: true,
-          }
-        })
-      }
+      
+      setStatus((prev) => ({
+        ...prev,
+        offline: data.offline || prev.offline,
+        error: null,
+      }))
     } catch (error) {
-      console.error("[AutoSync] Erro ao verificar novas músicas:", error)
+      console.error("[AutoSync] Erro ao verificar status offline:", error)
     }
   }, [])
 
-  const performSync = useCallback(async () => {
-    setStatus((prev) => {
-      if (prev.isSyncing) return prev
-      return { ...prev, isSyncing: true, error: null }
-    })
+  // Baixar metadados das músicas
+  const downloadMetadata = useCallback(async () => {
+    if (!isActivated) return // Silenciosamente ignora se não ativado
+    setStatus((prev) => ({ ...prev, isSyncing: true, error: null }))
 
     try {
-      const response = await fetch("/api/sync", {
+      const response = await fetch("/api/sync?action=download-metadata", {
         method: "POST",
       })
 
       if (!response.ok) {
-        throw new Error(`Sync failed: ${response.statusText}`)
+        throw new Error(`Download failed: ${response.statusText}`)
       }
 
       const data = await response.json()
-      console.log("[AutoSync] Sync concluído:", data.message)
+      console.log("[AutoSync] Metadados baixados:", data)
 
       setStatus((prev) => ({
         ...prev,
         isSyncing: false,
         lastSync: new Date(),
         error: null,
-        downloaded: data.results?.downloaded || 0,
-        message: data.message || null,
+        message: null,
       }))
+
+      // Atualizar status offline
+      await checkOfflineStatus()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido"
-      console.error("[AutoSync] Erro ao sincronizar:", errorMessage)
+      console.error("[AutoSync] Erro ao baixar metadados:", errorMessage)
       
       setStatus((prev) => ({
         ...prev,
@@ -99,14 +106,93 @@ export function useAutoSync(intervalMinutes: number = 30) {
         error: errorMessage,
       }))
     }
-  }, [])
+  }, [isActivated, checkOfflineStatus])
 
-  // Verificar conexão (sem sincronizar automaticamente)
+  // Baixar todas as músicas para offline
+  const downloadAllForOffline = useCallback(async () => {
+    if (!isActivated) return
+    setStatus((prev) => ({ 
+      ...prev, 
+      isDownloading: true, 
+      error: null,
+      message: null
+    }))
+
+    try {
+      const response = await fetch("/api/sync?action=download", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log("[AutoSync] Download completo:", data)
+
+      setStatus((prev) => ({
+        ...prev,
+        isDownloading: false,
+        lastSync: new Date(),
+        error: null,
+        message: null,
+        downloadProgress: null,
+      }))
+
+      // Atualizar status offline
+      await checkOfflineStatus()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido"
+      console.error("[AutoSync] Erro ao baixar músicas:", errorMessage)
+      
+      setStatus((prev) => ({
+        ...prev,
+        isDownloading: false,
+        error: errorMessage,
+        downloadProgress: null,
+      }))
+    }
+  }, [isActivated, checkOfflineStatus])
+
+  // Baixar músicas em lote (background)
+  const downloadBatch = useCallback(async () => {
+    if (!isActivated) return // Silenciosamente ignora se não ativado
+    if (status.isDownloading || status.isSyncing) return
+
+    try {
+      const response = await fetch("/api/sync?action=download-batch&size=3", {
+        method: "POST",
+      })
+
+      if (!response.ok) return
+
+      const data = await response.json()
+      console.log(`[AutoSync] Lote: ${data.downloaded} baixados, ${data.remaining} restantes`)
+
+      // Atualizar status
+      await checkOfflineStatus()
+
+      // Se ainda há músicas para baixar, agendar próximo lote
+      if (data.remaining > 0) {
+        setTimeout(() => downloadBatch(), 5000) // 5 segundos entre lotes
+      }
+    } catch (error) {
+      console.error("[AutoSync] Erro no download em lote:", error)
+    }
+  }, [isActivated, status.isDownloading, status.isSyncing, checkOfflineStatus])
+
+  // Iniciar download em background automaticamente
+  const startBackgroundDownload = useCallback(() => {
+    downloadBatch()
+  }, [downloadBatch])
+
+  // Verificar conexão
   useEffect(() => {
     const handleOnline = () => {
       console.log("[AutoSync] Conexão detectada")
       setStatus((prev) => ({ ...prev, isOnline: true }))
-      // Não sincronizar automaticamente - só verificar novas músicas
+      // Verificar status quando voltar online
+      checkOfflineStatus()
     }
 
     const handleOffline = () => {
@@ -114,119 +200,58 @@ export function useAutoSync(intervalMinutes: number = 30) {
       setStatus((prev) => ({ ...prev, isOnline: false }))
     }
 
-    // Marcar como inicializado, mas não sincronizar automaticamente
-    if (typeof navigator !== "undefined" && navigator.onLine && !isInitialSyncRef.current) {
-      isInitialSyncRef.current = true
-      // Não executar sync automático - só verificar novas músicas depois
-    }
-
     window.addEventListener("online", handleOnline)
     window.addEventListener("offline", handleOffline)
+
+    // Verificar status inicial
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      checkOfflineStatus()
+    }
 
     return () => {
       window.removeEventListener("online", handleOnline)
       window.removeEventListener("offline", handleOffline)
     }
-  }, [])
+  }, [checkOfflineStatus])
 
-  const allowSync = useCallback(() => {
-    setStatus((prev) => ({ ...prev, showPermissionDialog: false }))
-    performSync()
-  }, [performSync])
-
-  const denySync = useCallback(() => {
-    lastDeniedRef.current = new Date() // Registrar quando negou
-    setStatus((prev) => ({ ...prev, showPermissionDialog: false, availableCount: 0 }))
-  }, [])
-
-  // Verificar periodicamente por novas músicas quando online (menos frequente)
+  // Verificar periodicamente o status offline
   useEffect(() => {
-    if (!status.isOnline || status.showPermissionDialog) return
+    if (!status.isOnline) return
 
-    const checkInterval = 30 * 60 * 1000 // Verificar a cada 30 minutos (menos impertinente)
+    const checkInterval = intervalMinutes * 60 * 1000
 
-    const scheduleCheck = () => {
-      if (checkTimeoutRef.current) {
-        clearTimeout(checkTimeoutRef.current)
-      }
-
-      checkTimeoutRef.current = setTimeout(() => {
-        checkForNewMusic()
-        scheduleCheck()
-      }, checkInterval)
-    }
-
-    // Primeira verificação após 2 minutos (dar tempo para o app carregar)
     checkTimeoutRef.current = setTimeout(() => {
-      checkForNewMusic()
-      scheduleCheck()
-    }, 2 * 60 * 1000)
+      checkOfflineStatus()
+    }, checkInterval)
 
     return () => {
       if (checkTimeoutRef.current) {
         clearTimeout(checkTimeoutRef.current)
       }
     }
-  }, [status.isOnline, status.showPermissionDialog, checkForNewMusic])
+  }, [status.isOnline, intervalMinutes, checkOfflineStatus])
 
-  // Função para verificar manualmente novas músicas
-  const checkManually = useCallback(async () => {
-    // Resetar o cooldown de negação para permitir verificação manual
-    lastDeniedRef.current = null
+  // Iniciar download em background quando há músicas pendentes E usuário está ativado
+  useEffect(() => {
+    if (!isActivated) return
+    if (!status.isOnline) return
+    if (status.isDownloading || status.isSyncing) return
     
-    try {
-      const response = await fetch("/api/sync", { method: "GET" })
-      if (!response.ok) {
-        setStatus((prev) => ({
-          ...prev,
-          error: "Erro ao verificar novas músicas",
-        }))
-        return
-      }
-
-      const data = await response.json()
-      const available = data.available || 0
-
-      if (available > 0) {
-        setStatus((prev) => ({
-          ...prev,
-          availableCount: available,
-          showPermissionDialog: true,
-          error: null,
-        }))
-      } else {
-        // Não há novas músicas - mostrar mensagem temporária
-        setStatus((prev) => ({
-          ...prev,
-          availableCount: 0,
-          showPermissionDialog: false,
-          error: null,
-          message: "Todas as músicas já foram baixadas!",
-        }))
-        
-        // Limpar mensagem após 3 segundos
-        setTimeout(() => {
-          setStatus((prev) => ({
-            ...prev,
-            message: null,
-          }))
-        }, 3000)
-      }
-    } catch (error) {
-      console.error("[AutoSync] Erro ao verificar novas músicas:", error)
-      setStatus((prev) => ({
-        ...prev,
-        error: "Erro ao verificar novas músicas",
-      }))
+    // Se há músicas para baixar, iniciar em background após 10 segundos
+    if (status.offline.musicasOnline > 0) {
+      const timer = setTimeout(() => {
+        downloadBatch()
+      }, 10000)
+      
+      return () => clearTimeout(timer)
     }
-  }, [])
+  }, [isActivated, status.isOnline, status.offline.musicasOnline, status.isDownloading, status.isSyncing, downloadBatch])
 
   return {
     ...status,
-    performSync,
-    allowSync,
-    denySync,
-    checkManually,
+    checkOfflineStatus,
+    downloadMetadata,
+    downloadAllForOffline,
+    startBackgroundDownload,
   }
 }
-

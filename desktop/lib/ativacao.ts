@@ -1,6 +1,6 @@
 /**
  * Utilitários para gerenciar ativação do sistema desktop
- * - Validação online da chave
+ * - Validação online da chave via Supabase
  * - Armazenamento local no SQLite
  * - Verificação offline
  */
@@ -9,12 +9,8 @@ import { localDb } from "./db/local-db"
 import { ativacaoLocal } from "./db/local-schema"
 import { eq } from "drizzle-orm"
 import { ensureLocalDbInitialized } from "./db/auto-init"
-
-// URL da API Web - usar variável de ambiente ou fallback para produção
-const API_URL = 
-  process.env.NEXT_PUBLIC_API_URL || 
-  process.env.NEXT_PUBLIC_APP_URL || 
-  (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://www.bluekaraokes.com.br")
+import { supabase } from "./supabase-client"
+import { normalizarChave, validarFormatoChave } from "./utils/chave-ativacao"
 
 export interface ValidacaoChaveResponse {
   valida: boolean
@@ -35,43 +31,202 @@ export interface ValidacaoChaveResponse {
 }
 
 /**
- * Valida chave de ativação online e salva localmente
+ * Valida chave de ativação online via Supabase e salva localmente
  */
 export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveResponse> {
   try {
-    // Timeout de 10 segundos para a requisição
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    // Normalizar chave
+    const chaveNormalizada = normalizarChave(chave)
 
-    const response = await fetch(`${API_URL}/api/ativacao/validar`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ chave }),
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }))
+    if (!validarFormatoChave(chaveNormalizada)) {
       return {
         valida: false,
-        error: errorData.error || "Erro ao validar chave",
+        error: "Formato de chave inválido",
       }
     }
 
-    const data: ValidacaoChaveResponse = await response.json()
+    // Buscar chave no Supabase
+    const { data: chaveData, error: chaveError } = await supabase
+      .from("chaves_ativacao")
+      .select("*")
+      .eq("chave", chaveNormalizada)
+      .single()
 
-    if (data.valida && data.chave) {
-      // Garantir que o banco está inicializado
+    if (chaveError || !chaveData) {
+      return {
+        valida: false,
+        error: "Chave de ativação não encontrada",
+      }
+    }
+
+    // Verificar status
+    if (chaveData.status !== "ativa") {
+      return {
+        valida: false,
+        error: "Chave de ativação não está ativa",
+      }
+    }
+
+    const now = new Date()
+
+    // Validações por tipo
+    if (chaveData.tipo === "assinatura") {
+      // Verificar expiração
+      if (chaveData.data_expiracao && new Date(chaveData.data_expiracao) < now) {
+        // Atualizar status no Supabase
+        await supabase
+          .from("chaves_ativacao")
+          .update({ status: "expirada" })
+          .eq("id", chaveData.id)
+
+        return {
+          valida: false,
+          error: "Chave de ativação expirada",
+        }
+      }
+
+      // Verificar assinatura do usuário se existir
+      if (chaveData.user_id) {
+        const { data: assinatura, error: assinaturaError } = await supabase
+          .from("assinaturas")
+          .select("*")
+          .eq("user_id", chaveData.user_id)
+          .single()
+
+        if (assinaturaError || !assinatura || assinatura.status !== "ativa") {
+          return {
+            valida: false,
+            error: "Assinatura não está ativa",
+          }
+        }
+      }
+    } else if (chaveData.tipo === "maquina") {
+      // Verificar limite de tempo
+      if (chaveData.limite_tempo && chaveData.data_inicio) {
+        const horasUsadas =
+          (now.getTime() - new Date(chaveData.data_inicio).getTime()) /
+          (1000 * 60 * 60)
+
+        if (horasUsadas >= chaveData.limite_tempo) {
+          // Atualizar status no Supabase
+          await supabase
+            .from("chaves_ativacao")
+            .update({ status: "expirada" })
+            .eq("id", chaveData.id)
+
+          return {
+            valida: false,
+            error: "Limite de tempo da chave excedido",
+          }
+        }
+      } else if (chaveData.limite_tempo && !chaveData.data_inicio) {
+        // Primeira vez usando - iniciar contagem
+        await supabase
+          .from("chaves_ativacao")
+          .update({
+            data_inicio: now.toISOString(),
+            usado_em: now.toISOString(),
+            ultimo_uso: now.toISOString(),
+          })
+          .eq("id", chaveData.id)
+      } else {
+        // Atualizar último uso
+        await supabase
+          .from("chaves_ativacao")
+          .update({ ultimo_uso: now.toISOString() })
+          .eq("id", chaveData.id)
+      }
+    }
+
+    // Buscar dados do usuário se existir
+    let userData = null
+    if (chaveData.user_id) {
+      const { data: user } = await supabase
+        .from("users")
+        .select("id, name, email, user_type")
+        .eq("id", chaveData.user_id)
+        .single()
+
+      if (user) {
+        userData = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        }
+      }
+    }
+
+    // Calcular dias restantes para chaves de assinatura
+    let diasRestantes: number | null = null
+    if (chaveData.tipo === "assinatura") {
+      // Se tiver userId, verificar assinatura primeiro
+      if (chaveData.user_id) {
+        const { data: assinatura } = await supabase
+          .from("assinaturas")
+          .select("data_fim")
+          .eq("user_id", chaveData.user_id)
+          .eq("status", "ativa")
+          .single()
+
+        if (assinatura && assinatura.data_fim) {
+          // Usar data_fim da assinatura
+          const dataExpiracao = new Date(assinatura.data_fim)
+          const diffTime = dataExpiracao.getTime() - now.getTime()
+          diasRestantes = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
+        } else if (chaveData.data_expiracao) {
+          // Fallback para data_expiracao da chave
+          const dataExpiracao = new Date(chaveData.data_expiracao)
+          const diffTime = dataExpiracao.getTime() - now.getTime()
+          diasRestantes = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
+        }
+      } else if (chaveData.data_expiracao) {
+        // Chave sem userId, usar data_expiracao da chave
+        const dataExpiracao = new Date(chaveData.data_expiracao)
+        const diffTime = dataExpiracao.getTime() - now.getTime()
+        diasRestantes = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
+      }
+    }
+
+    // Calcular horas restantes para chaves de máquina
+    let horasRestantes: number | null = null
+    if (chaveData.tipo === "maquina" && chaveData.limite_tempo && chaveData.data_inicio) {
+      horasRestantes = Math.max(
+        0,
+        chaveData.limite_tempo -
+          (now.getTime() - new Date(chaveData.data_inicio).getTime()) /
+            (1000 * 60 * 60)
+      )
+    }
+
+    // Atualizar último uso para chaves de assinatura
+    if (chaveData.tipo === "assinatura") {
+      await supabase
+        .from("chaves_ativacao")
+        .update({ ultimo_uso: now.toISOString() })
+        .eq("id", chaveData.id)
+    }
+
+    // Preparar resposta
+    const response: ValidacaoChaveResponse = {
+      valida: true,
+      chave: {
+        id: chaveData.id,
+        chave: chaveData.chave,
+        tipo: chaveData.tipo as "assinatura" | "maquina",
+        diasRestantes,
+        horasRestantes,
+        dataExpiracao: chaveData.data_expiracao,
+      },
+      user: userData || undefined,
+    }
+
+    // Salvar no banco local
+    if (response.valida && response.chave) {
       await ensureLocalDbInitialized()
       
-      // Salvar no banco local
-      const now = Date.now()
-      const dataExpiracaoTimestamp = data.chave.dataExpiracao
-        ? new Date(data.chave.dataExpiracao).getTime()
+      const nowTimestamp = Date.now()
+      const dataExpiracaoTimestamp = response.chave.dataExpiracao
+        ? new Date(response.chave.dataExpiracao).getTime()
         : null
 
       // Verificar se já existe ativação
@@ -86,46 +241,38 @@ export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveR
         await localDb
           .update(ativacaoLocal)
           .set({
-            chave: data.chave.chave,
-            tipo: data.chave.tipo,
-            diasRestantes: data.chave.diasRestantes,
-            horasRestantes: data.chave.horasRestantes,
+            chave: response.chave.chave,
+            tipo: response.chave.tipo,
+            diasRestantes: response.chave.diasRestantes,
+            horasRestantes: response.chave.horasRestantes,
             dataExpiracao: dataExpiracaoTimestamp,
-            dataValidacao: now,
-            updatedAt: now,
+            dataValidacao: nowTimestamp,
+            updatedAt: nowTimestamp,
           })
           .where(eq(ativacaoLocal.id, "1"))
       } else {
         // Criar nova
         await localDb.insert(ativacaoLocal).values({
           id: "1",
-          chave: data.chave.chave,
-          tipo: data.chave.tipo,
-          diasRestantes: data.chave.diasRestantes,
-          horasRestantes: data.chave.horasRestantes,
+          chave: response.chave.chave,
+          tipo: response.chave.tipo,
+          diasRestantes: response.chave.diasRestantes,
+          horasRestantes: response.chave.horasRestantes,
           dataExpiracao: dataExpiracaoTimestamp,
-          dataValidacao: now,
-          createdAt: now,
-          updatedAt: now,
+          dataValidacao: nowTimestamp,
+          createdAt: nowTimestamp,
+          updatedAt: nowTimestamp,
         })
       }
     }
 
-    return data
+    return response
   } catch (error: any) {
     console.error("Erro ao validar chave online:", error)
     
-    // Tratar diferentes tipos de erro
-    if (error.name === "AbortError") {
-      return {
-        valida: false,
-        error: "Tempo de espera esgotado. Verifique sua conexão.",
-      }
-    }
-    
     return {
       valida: false,
-      error: error.message || "Erro de conexão",
+      error: error.message || "Erro de conexão com o banco de dados",
     }
   }
 }

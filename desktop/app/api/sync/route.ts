@@ -1,20 +1,73 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { syncAll } from "@/lib/sync"
+import { 
+  downloadMusicasMetadata, 
+  downloadAllMusicas, 
+  downloadMusicasBatch,
+  getOfflineStatus 
+} from "@/lib/sync-download"
 import { ensureLocalDbInitialized } from "@/lib/db/auto-init"
 
 /**
- * API route para sincronizar dados locais com Supabase
- * POST /api/sync - Sincroniza todos os dados não sincronizados
+ * API route para sincronização offline
+ * 
+ * POST /api/sync - Sincroniza dados (upload local -> Supabase)
+ * GET /api/sync - Retorna status da sincronização
+ * POST /api/sync?action=download - Baixa músicas para offline
+ * POST /api/sync?action=download-metadata - Baixa apenas metadados
  */
-export async function POST() {
+
+export async function POST(request: NextRequest) {
   try {
-    // Garantir que o banco local está inicializado
     await ensureLocalDbInitialized()
     
+    const action = request.nextUrl.searchParams.get("action")
+    
+    // Download de músicas para offline
+    if (action === "download") {
+      const result = await downloadAllMusicas()
+      
+      return NextResponse.json({
+        success: true,
+        action: "download",
+        metadataDownloaded: result.metadataDownloaded,
+        filesDownloaded: result.filesDownloaded,
+        errors: result.errors,
+      })
+    }
+    
+    // Download apenas de metadados
+    if (action === "download-metadata") {
+      const result = await downloadMusicasMetadata()
+      
+      return NextResponse.json({
+        success: true,
+        action: "download-metadata",
+        downloaded: result.downloaded,
+        errors: result.errors,
+      })
+    }
+    
+    // Download em lote (background)
+    if (action === "download-batch") {
+      const batchSize = parseInt(request.nextUrl.searchParams.get("size") || "3", 10)
+      const result = await downloadMusicasBatch(batchSize)
+      
+      return NextResponse.json({
+        success: true,
+        action: "download-batch",
+        downloaded: result.downloaded,
+        remaining: result.remaining,
+        errors: result.errors,
+      })
+    }
+    
+    // Sincronização padrão (upload local -> Supabase)
     const result = await syncAll()
     
     return NextResponse.json({
       success: true,
+      action: "sync",
       synced: result.synced,
       historico: result.historico,
       musicas: result.musicas,
@@ -33,41 +86,37 @@ export async function POST() {
 }
 
 /**
- * GET /api/sync - Retorna status da sincronização
+ * GET /api/sync - Retorna status da sincronização offline
  */
 export async function GET() {
   try {
-    // Garantir que o banco local está inicializado
     await ensureLocalDbInitialized()
     
-    const { localDb, historicoLocal, musicasLocal } = await import("@/lib/db/local-db")
-    const { isNull, count } = await import("drizzle-orm")
-
-    // Contar itens não sincronizados
-    const unsyncedHistorico = await localDb
-      .select({ count: count() })
-      .from(historicoLocal)
-      .where(isNull(historicoLocal.syncedAt))
-
-    const unsyncedMusicas = await localDb
-      .select({ count: count() })
-      .from(musicasLocal)
-      .where(isNull(musicasLocal.syncedAt))
-
+    const status = await getOfflineStatus()
+    
     return NextResponse.json({
       success: true,
-      unsynced: {
-        historico: unsyncedHistorico[0]?.count || 0,
-        musicas: unsyncedMusicas[0]?.count || 0,
+      status: "ready",
+      offline: {
+        totalMusicas: status.totalMusicas,
+        musicasOffline: status.musicasOffline,
+        musicasOnline: status.musicasOnline,
+        storageUsed: status.storageUsed,
+        storageUsedMB: Math.round(status.storageUsed / 1024 / 1024 * 100) / 100,
       },
     })
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || "Erro ao verificar status",
+    console.error("Erro ao verificar status de sync:", error)
+    return NextResponse.json({
+      success: true,
+      status: "initializing",
+      offline: {
+        totalMusicas: 0,
+        musicasOffline: 0,
+        musicasOnline: 0,
+        storageUsed: 0,
+        storageUsedMB: 0,
       },
-      { status: 500 }
-    )
+    })
   }
 }
