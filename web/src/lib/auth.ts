@@ -87,8 +87,11 @@ export const auth = betterAuth({
     // Domínios de produção
     "https://www.bluekaraokes.com.br",
     "https://bluekaraokes.com.br",
-    // Localhost para desenvolvimento
+    // Localhost para desenvolvimento (múltiplas portas)
     "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
     // Vercel preview deployments
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
     // Next.js public URL se disponível

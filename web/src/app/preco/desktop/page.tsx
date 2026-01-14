@@ -1,7 +1,7 @@
 "use client"
 
 import { Header } from "@/components/header/desktop"
-import { Check } from "lucide-react"
+import { Check, MessageCircle } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useEffect, useState } from "react"
@@ -76,14 +76,11 @@ export default function PrecoDesktop() {
       <Header />
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-6 md:px-12 lg:px-20">
+      <section className="relative pt-32 pb-10 px-6 md:px-12 lg:px-20">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
-            Preços
+          <h1 className="text-5xl md:text-6xl font-bold text-white mb-0">
+            Planos
           </h1>
-          <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-            Escolha o plano ideal para o seu negócio
-          </p>
         </div>
       </section>
 
@@ -171,13 +168,25 @@ export default function PrecoDesktop() {
               Dúvidas sobre os planos?
             </h2>
             <p className="text-gray-300 mb-8">
-              Entre em contato conosco para mais informações
+              Fale diretamente conosco pelo WhatsApp
             </p>
-            <Link href="/cadastro">
-              <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 px-8">
-                Criar Conta
-              </Button>
-            </Link>
+            <div className="flex items-center justify-center gap-4">
+              <a 
+                href="https://wa.me/5566990019079?text=Olá! Gostaria de saber mais sobre os planos do Blue Karaokês" 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                <Button size="lg" className="bg-[#25D366] hover:bg-[#20BD5A] text-white px-8 gap-2">
+                  <MessageCircle className="h-5 w-5" />
+                  Falar no WhatsApp
+                </Button>
+              </a>
+              <Link href="/cadastro">
+                <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 px-8">
+                  Criar Conta
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>

@@ -15,6 +15,7 @@ export function Header() {
       {/* Navigation */}
       <nav className="hidden items-center gap-1 lg:flex">
         <div className="flex items-center rounded-full bg-white/10 backdrop-blur-sm px-1 py-1">
+          <Link href="/catalogo" className="px-4 py-2 text-sm text-white hover:text-white/80 transition-colors">Músicas</Link>
           <Link href="/preco" className="px-4 py-2 text-sm text-white hover:text-white/80 transition-colors">Preço</Link>
           <Link href="/recursos" className="px-4 py-2 text-sm text-white hover:text-white/80 transition-colors">
             Recursos

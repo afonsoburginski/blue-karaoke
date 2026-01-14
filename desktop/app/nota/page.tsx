@@ -1,19 +1,51 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
+import Lottie from 'lottie-react'
 
-export default function NotaPage() {
+function NotaContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const notaFinal = Number.parseInt(searchParams.get("nota") || "0")
+  const notaFinal = Number.parseInt(searchParams.get("nota") || "85")
 
+  const [showCelebration, setShowCelebration] = useState(true)
+  const [showNota, setShowNota] = useState(false)
   const [displayNota, setDisplayNota] = useState(0)
-  const [countdown, setCountdown] = useState(8)
+  const [countdown, setCountdown] = useState(10)
+  const [celebrationData, setCelebrationData] = useState<object | null>(null)
 
+  // Carregar animação Lottie
   useEffect(() => {
-    const duration = 2000
-    const steps = 50
+    fetch('/celebrations.json')
+      .then(res => res.json())
+      .then(data => setCelebrationData(data))
+      .catch(err => {
+        console.error('Erro ao carregar animação:', err)
+        // Pular animação se não carregar
+        setShowCelebration(false)
+        setShowNota(true)
+      })
+  }, [])
+
+  // Mostrar nota após celebração (3 segundos)
+  useEffect(() => {
+    if (!celebrationData) return
+    
+    const timer = setTimeout(() => {
+      setShowCelebration(false)
+      setShowNota(true)
+    }, 3000)
+
+    return () => clearTimeout(timer)
+  }, [celebrationData])
+
+  // Animar nota subindo
+  useEffect(() => {
+    if (!showNota) return
+
+    const duration = 1500
+    const steps = 30
     const increment = notaFinal / steps
     const stepDuration = duration / steps
 
@@ -29,13 +61,17 @@ export default function NotaPage() {
     }, stepDuration)
 
     return () => clearInterval(interval)
-  }, [notaFinal])
+  }, [showNota, notaFinal])
 
+  // Countdown para voltar
   useEffect(() => {
+    if (!showNota) return
+
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer)
+          router.push("/")
           return 0
         }
         return prev - 1
@@ -43,77 +79,120 @@ export default function NotaPage() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [])
+  }, [showNota, router])
 
+  // Handler para tecla Enter
   useEffect(() => {
-    if (countdown === 0) {
-      router.push("/")
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        router.push("/")
+      }
     }
-  }, [countdown, router])
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [router])
 
   const getMessage = () => {
-    if (notaFinal >= 90) return "INCRÍVEL!"
-    if (notaFinal >= 80) return "MUITO BOM!"
-    if (notaFinal >= 70) return "BOM!"
-    return "CONTINUE PRATICANDO!"
+    if (notaFinal >= 90) return "🎉 INCRÍVEL!"
+    if (notaFinal >= 80) return "🌟 MUITO BOM!"
+    if (notaFinal >= 70) return "👏 BOM TRABALHO!"
+    if (notaFinal >= 50) return "💪 CONTINUE PRATICANDO!"
+    return "🎤 TENTE NOVAMENTE!"
+  }
+
+  const getStars = () => {
+    if (notaFinal >= 90) return 5
+    if (notaFinal >= 80) return 4
+    if (notaFinal >= 70) return 3
+    if (notaFinal >= 50) return 2
+    return 1
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-black via-purple-950/30 to-black relative overflow-hidden">
-      {/* Partículas de fundo animadas */}
-      <div className="absolute inset-0 opacity-20">
-        {[...Array(20)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full animate-pulse"
-            style={{
-              width: Math.random() * 100 + 50 + "px",
-              height: Math.random() * 100 + 50 + "px",
-              left: Math.random() * 100 + "%",
-              top: Math.random() * 100 + "%",
-              background:
-                i % 2 === 0
-                  ? "radial-gradient(circle, rgba(168,85,247,0.3) 0%, transparent 70%)"
-                  : "radial-gradient(circle, rgba(6,182,212,0.3) 0%, transparent 70%)",
-              animationDelay: Math.random() * 2 + "s",
-              animationDuration: Math.random() * 3 + 2 + "s",
-            }}
+    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-black via-purple-950/40 to-black relative overflow-hidden">
+      
+      {/* Animação de celebração (Lottie) - sobrepõe tudo */}
+      {showCelebration && celebrationData && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60">
+          <Lottie 
+            animationData={celebrationData}
+            loop={false}
+            autoplay={true}
+            style={{ width: '100vw', height: '100vh' }}
           />
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Conteúdo principal */}
-      <div className="relative z-10 text-center space-y-12">
+      <div 
+        className={`relative z-10 text-center space-y-6 transition-all duration-500 ${
+          showNota ? 'opacity-100 scale-100' : 'opacity-0 scale-90'
+        }`}
+      >
         {/* Mensagem de performance */}
-        <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(168,85,247,0.6)]">
+        <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
           {getMessage()}
         </h1>
 
-        {/* Exibição da nota */}
-        <div className="space-y-6">
-          <p className="text-3xl text-white/90">Sua nota:</p>
+        {/* Estrelas */}
+        <div className="flex justify-center gap-2">
+          {[...Array(5)].map((_, i) => (
+            <span 
+              key={i} 
+              className={`text-4xl ${
+                i < getStars() 
+                  ? 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]' 
+                  : 'text-white/20'
+              }`}
+            >
+              ★
+            </span>
+          ))}
+        </div>
 
-          <div className="relative">
-            <div className="text-[12rem] font-bold bg-gradient-to-br from-purple-400 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_40px_rgba(168,85,247,0.8)]">
-              {displayNota}
-            </div>
-            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-4xl text-white/40">
-              / 100
-            </div>
+        {/* Exibição da nota */}
+        <div className="mt-8">
+          <p className="text-xl text-white/60 mb-2">Sua pontuação</p>
+          <div 
+            className={`text-[10rem] md:text-[14rem] font-black leading-none ${
+              notaFinal >= 80 
+                ? 'bg-gradient-to-br from-green-400 to-cyan-400' 
+                : notaFinal >= 60 
+                ? 'bg-gradient-to-br from-yellow-400 to-orange-400'
+                : 'bg-gradient-to-br from-red-400 to-pink-400'
+            } bg-clip-text text-transparent`}
+          >
+            {displayNota}
           </div>
+          <p className="text-2xl text-white/30">/ 100</p>
         </div>
 
         {/* Countdown para voltar */}
-        <div className="mt-16 space-y-4">
-          <div className="w-64 h-2 bg-white/10 rounded-full mx-auto overflow-hidden">
+        <div className="mt-8 space-y-2">
+          <div className="w-64 h-1 bg-white/10 rounded-full mx-auto overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-1000"
-              style={{ width: `${(countdown / 8) * 100}%` }}
+              style={{ width: `${(countdown / 10) * 100}%` }}
             />
           </div>
-          <p className="text-xl text-white/60">Voltando ao início em {countdown}s</p>
+          <p className="text-sm text-white/40">
+            Voltando em <span className="text-cyan-400">{countdown}s</span> • Pressione <span className="text-cyan-400">Enter</span>
+          </p>
         </div>
       </div>
     </main>
+  )
+}
+
+export default function NotaPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex items-center justify-center bg-black">
+        <div className="animate-pulse text-white text-xl">Carregando...</div>
+      </main>
+    }>
+      <NotaContent />
+    </Suspense>
   )
 }

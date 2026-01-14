@@ -24,3 +24,5 @@ const client = postgres(DATABASE_URL, {
 // Criar instância do Drizzle
 export const db = drizzle(client, { schema })
 
+// Exportar schema para uso em queries
+export * from "./schema"

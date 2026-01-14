@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm"
-import { localDb, musicasLocal, historicoLocal } from "./local-db"
+import { localDb, musicasLocal, historicoLocal } from "./db/local-db"
 import { db, musicas, historico } from "./db"
 import { v4 as uuidv4 } from "uuid"
-import { syncAll } from "../sync"
-import { ensureLocalDbInitialized } from "./auto-init"
+import { syncAll } from "./sync"
+import { ensureLocalDbInitialized } from "./db/auto-init"
 
 export interface Musica {
   codigo: string

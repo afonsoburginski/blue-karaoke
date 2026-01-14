@@ -1,7 +1,7 @@
 "use client"
 
 import { Header } from "@/components/header/mobile"
-import { Check } from "lucide-react"
+import { Check, MessageCircle } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useEffect, useState } from "react"
@@ -167,13 +167,26 @@ export default function PrecoMobile() {
               Dúvidas sobre os planos?
             </h2>
             <p className="text-gray-300 text-sm mb-6">
-              Entre em contato conosco para mais informações
+              Fale diretamente conosco pelo WhatsApp
             </p>
-            <Link href="/cadastro" className="w-full block">
-              <Button size="lg" variant="outline" className="w-full border-white/20 text-white hover:bg-white/10">
-                Criar Conta
-              </Button>
-            </Link>
+            <div className="flex flex-col gap-3">
+              <a 
+                href="https://wa.me/5566990019079?text=Olá! Gostaria de saber mais sobre os planos do Blue Karaokês" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-full block"
+              >
+                <Button size="lg" className="w-full bg-[#25D366] hover:bg-[#20BD5A] text-white gap-2">
+                  <MessageCircle className="h-5 w-5" />
+                  Falar no WhatsApp
+                </Button>
+              </a>
+              <Link href="/cadastro" className="w-full block">
+                <Button size="lg" variant="outline" className="w-full border-white/20 text-white hover:bg-white/10">
+                  Criar Conta
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
