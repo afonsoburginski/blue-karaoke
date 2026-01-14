@@ -10,15 +10,7 @@ const nextConfig = {
   // Garantir que os caminhos funcionem no Electron
   basePath: "",
   assetPrefix: "",
-  // Configuração do Turbopack (Next.js 16+)
-  turbopack: {
-    resolveAlias: {
-      // Excluir módulos Node.js do bundle do cliente
-      "better-sqlite3": false,
-    },
-    resolveExtensions: [".js", ".jsx", ".ts", ".tsx"],
-  },
-  // Configuração do Webpack (fallback para builds)
+  // Configuração do Webpack (usado para builds)
   webpack: (config, { isServer }) => {
     // Excluir módulos Node.js do bundle do cliente
     if (!isServer) {

@@ -1,5 +1,8 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
 
+// Tipo para chave de ativação (enum equivalente ao PostgreSQL)
+export type TipoChave = "assinatura" | "maquina"
+
 // Tabela de Músicas Local (SQLite)
 export const musicasLocal = sqliteTable("musicas_local", {
   id: text("id").primaryKey(),
@@ -31,7 +34,7 @@ export const historicoLocal = sqliteTable("historico_local", {
 export const ativacaoLocal = sqliteTable("ativacao_local", {
   id: text("id").primaryKey().default("1"), // Sempre 1, apenas uma ativação por instalação
   chave: text("chave").notNull().unique(),
-  tipo: text("tipo").notNull(), // 'assinatura' ou 'maquina'
+  tipo: text("tipo").$type<TipoChave>().notNull(), // 'assinatura' ou 'maquina' (enum no PostgreSQL)
   diasRestantes: integer("dias_restantes"), // Para tipo 'assinatura'
   horasRestantes: integer("horas_restantes"), // Para tipo 'maquina'
   dataExpiracao: integer("data_expiracao"), // Timestamp da data de expiração

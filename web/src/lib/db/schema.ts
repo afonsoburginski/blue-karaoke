@@ -1,4 +1,7 @@
-import { pgTable, text, timestamp, integer, uuid, boolean } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, integer, uuid, boolean, pgEnum } from "drizzle-orm/pg-core"
+
+// Enum para tipo de chave de ativação
+export const tipoChaveEnum = pgEnum("tipo_chave", ["assinatura", "maquina"])
 
 // Tabela de Usuários (compatível com Better Auth)
 // Better Auth usa CUID por padrão, não UUID
@@ -117,7 +120,7 @@ export const chavesAtivacao = pgTable("chaves_ativacao", {
   id: uuid("id").primaryKey().defaultRandom(),
   chave: text("chave").notNull().unique(), // Chave única de ativação
   userId: text("user_id").references(() => users.id), // Usuário associado (se for assinante)
-  tipo: text("tipo").notNull(), // 'assinatura' ou 'maquina'
+  tipo: tipoChaveEnum("tipo").notNull().default("maquina"), // 'assinatura' ou 'maquina'
   status: text("status").notNull().default("ativa"), // 'ativa', 'expirada', 'revogada'
   limiteTempo: integer("limite_tempo"), // Limite em horas (para máquinas)
   dataInicio: timestamp("data_inicio"), // Quando começou a usar (para máquinas)
@@ -141,6 +144,7 @@ export const sincronizacoes = pgTable("sincronizacoes", {
 })
 
 // Tipos TypeScript inferidos
+export type TipoChave = (typeof tipoChaveEnum.enumValues)[number]
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Musica = typeof musicas.$inferSelect

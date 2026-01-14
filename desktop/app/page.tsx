@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from 'next/navigation'
 import Image from "next/image"
 import { Spotlight } from "@/components/ui/spotlight-new"
-import { QRCodeSVG } from "qrcode.react"
 import { useAutoSync } from "@/hooks/useAutoSync"
 import { UploadDialog } from "@/components/upload-dialog"
 import { AtivacaoDialog } from "@/components/ativacao-dialog"
@@ -17,7 +16,6 @@ export default function HomePage() {
   const [codigo, setCodigo] = useState("")
   const [error, setError] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [qrValue, setQrValue] = useState("https://bluekaraoke.com")
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [ativacaoDialogOpen, setAtivacaoDialogOpen] = useState(false)
   const router = useRouter()
@@ -32,6 +30,7 @@ export default function HomePage() {
     downloadAllForOffline, 
     offline, 
     isDownloading, 
+    isOnline,
     message: syncMessage 
   } = useAutoSync({ intervalMinutes: 30, isActivated })
 
@@ -109,13 +108,6 @@ export default function HomePage() {
       }, 2000)
     }
   }, [codigo, isLoading, router, ativacaoStatus])
-
-  useEffect(() => {
-    // Set QR code value after hydration to avoid mismatch
-    if (typeof window !== "undefined") {
-      setQrValue(window.location.origin)
-    }
-  }, [])
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -280,27 +272,39 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Indicador de músicas offline */}
-      {offline.musicasOffline > 0 && (
+      {/* Indicador de status de conexão e músicas offline */}
+      {!syncMessage && !isDownloading && (
         <div className="absolute bottom-8 left-8 z-20">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-sm">
-            <span className="text-white/60 text-xs">
-              🎵 {offline.musicasOffline} músicas offline
-            </span>
+          <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-sm">
+            {/* Indicador Online/Offline */}
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+              <span className={`text-xs ${isOnline ? 'text-green-400' : 'text-red-400'}`}>
+                {isOnline ? 'Online' : 'Offline'}
+              </span>
+            </div>
+            {/* Contador de músicas offline */}
+            {offline.musicasOffline > 0 && (
+              <>
+                <span className="text-white/30">|</span>
+                <span className="text-white/60 text-xs">
+                  🎵 {offline.musicasOffline} músicas
+                </span>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* QR Code no canto inferior direito */}
       <div className="absolute bottom-8 right-8 z-20">
-        <div className="p-4 rounded-2xl bg-white/95 backdrop-blur-sm shadow-2xl border border-cyan-400/30">
-          <QRCodeSVG
-            value={qrValue}
-            size={120}
-            level="H"
-            includeMargin={false}
-            fgColor="#1e1b4b"
-            bgColor="#ffffff"
+        <div className="rounded-2xl overflow-hidden shadow-2xl border border-cyan-400/30">
+          <Image
+            src="/qr-code.png"
+            alt="QR Code"
+            width={140}
+            height={140}
+            className="block"
           />
         </div>
       </div>
@@ -333,38 +337,38 @@ export default function HomePage() {
            ativacaoStatus.tipo === "assinatura" ? (
             <UnifiedSearch />
           ) : (
-            <div className="flex justify-center">
-              <div className={`inline-flex gap-3 p-8 rounded-3xl bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border border-white/10 shadow-2xl ${
-                (!ativacaoStatus.ativada || ativacaoStatus.expirada) && ativacaoStatus.modo !== "loading"
-                  ? "opacity-50 pointer-events-none"
-                  : ""
-              }`}>
-                {[0, 1, 2, 3, 4].map((index) => {
-                  const hasValue = codigo[index]
+          <div className="flex justify-center">
+            <div className={`inline-flex gap-3 p-8 rounded-3xl bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border border-white/10 shadow-2xl ${
+              (!ativacaoStatus.ativada || ativacaoStatus.expirada) && ativacaoStatus.modo !== "loading"
+                ? "opacity-50 pointer-events-none"
+                : ""
+            }`}>
+              {[0, 1, 2, 3, 4].map((index) => {
+                const hasValue = codigo[index]
 
-                  return (
-                    <div
-                      key={index}
-                      className={`relative w-16 h-20 md:w-20 md:h-24 flex items-center justify-center rounded-xl transition-all duration-300 ${
-                        error
-                          ? "bg-red-500/20 border-2 border-red-500 animate-shake"
-                          : hasValue
-                            ? "bg-cyan-400/20 border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.3)]"
-                            : "bg-white/5 border-2 border-white/20"
+                return (
+                  <div
+                    key={index}
+                    className={`relative w-16 h-20 md:w-20 md:h-24 flex items-center justify-center rounded-xl transition-all duration-300 ${
+                      error
+                        ? "bg-red-500/20 border-2 border-red-500 animate-shake"
+                        : hasValue
+                          ? "bg-cyan-400/20 border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+                          : "bg-white/5 border-2 border-white/20"
+                    }`}
+                  >
+                    <span
+                      className={`text-4xl md:text-5xl font-bold transition-all ${
+                        hasValue ? "text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "text-white/30"
                       }`}
                     >
-                      <span
-                        className={`text-4xl md:text-5xl font-bold transition-all ${
-                          hasValue ? "text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "text-white/30"
-                        }`}
-                      >
-                        {codigo[index] || "•"}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
+                      {codigo[index] || "•"}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
+          </div>
           )}
 
           {/* Mensagem de erro */}
@@ -387,12 +391,12 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <p className="text-white/60 text-lg">
-                  Use as teclas <span className="text-cyan-400 font-semibold">0 - 9</span> para digitar
-                </p>
-                <p className="text-white/40 text-sm">
-                  Pressione <span className="text-cyan-400 font-semibold">Enter</span> quando tiver 5 dígitos
-                </p>
+            <p className="text-white/60 text-lg">
+              Use as teclas <span className="text-cyan-400 font-semibold">0 - 9</span> para digitar
+            </p>
+            <p className="text-white/40 text-sm">
+              Pressione <span className="text-cyan-400 font-semibold">Enter</span> quando tiver 5 dígitos
+            </p>
               </>
             )}
           </div>

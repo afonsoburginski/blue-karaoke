@@ -1,8 +1,9 @@
 module.exports = {
   appId: "com.bluekaraoke.app",
   productName: "Blue Karaoke",
+  executableName: "BlueKaraoke",
   directories: {
-    output: "dist",
+    output: "release",
     buildResources: "build",
   },
   files: [
@@ -11,57 +12,46 @@ module.exports = {
     ".next/static/**/*",
     "public/**/*",
     "package.json",
+    // Excluir pasta de vídeos baixados (apenas na raiz, não a API)
+    "!musicas/**/*",
+    "!musicas",
+    "!db.sqlite",
+    "!*.sqlite",
+    "!**/*.map",
+    "!**/node_modules/**/test/**",
+    "!**/node_modules/**/tests/**",
+    "!**/node_modules/**/*.md",
+    "!**/node_modules/**/LICENSE*",
+    "!**/node_modules/**/CHANGELOG*",
+    "!**/node_modules/**/.github/**",
+    "!**/drizzle-kit/**",
+    "!**/drizzle.config.*",
+    "!**/scripts/**",
+    "!**/*.d.ts",
+    "!drizzle/**",
+    "!build/**",
+    "!*.md",
+    "!*.txt",
+    "!test-*.js",
+    "!node_modules/**",
   ],
-  extraResources: [
-    {
-      from: ".next/standalone",
-      to: ".next/standalone",
-      filter: ["**/*"],
-    },
-    {
-      from: ".next/static",
-      to: ".next/static",
-      filter: ["**/*"],
-    },
-  ],
-  rebuild: false,
+  extraFiles: [],
+  asar: false, // Desabilitar ASAR para evitar problemas com better-sqlite3
   win: {
-    target: [
-      {
-        target: "nsis",
-        arch: ["x64"],
-      },
-    ],
-    icon: "public/icon.ico",
+    target: "nsis",
+    icon: "public/icon.png",
+    signAndEditExecutable: false,
   },
   nsis: {
-    oneClick: false,
-    allowToChangeInstallationDirectory: true,
-    createDesktopShortcut: true,
+    oneClick: true,
+    perMachine: true,
+    createDesktopShortcut: "always",
     createStartMenuShortcut: true,
   },
-  mac: {
-    target: ["dmg"],
-    icon: "public/icon.icns",
-    category: "public.app-category.music",
-  },
+  forceCodeSigning: false,
   linux: {
-    target: ["AppImage", "deb", "rpm"],
+    target: ["tar.gz"],
     icon: "public/icon.png",
     category: "AudioVideo",
-    desktop: {
-      Name: "Blue Karaoke",
-      Comment: "Sistema de Karaokê",
-      Categories: "AudioVideo;Audio;Music;",
-      StartupWMClass: "blue-karaoke",
-    },
-  },
-  deb: {
-    depends: ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1"],
-    packageCategory: "sound",
-  },
-  rpm: {
-    depends: ["gtk3", "libnotify", "nss", "libXScrnSaver", "libXtst", "xdg-utils", "at-spi2-core", "libuuid"],
   },
 }
-
