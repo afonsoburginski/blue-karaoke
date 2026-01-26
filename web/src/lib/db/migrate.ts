@@ -5,7 +5,7 @@ import * as dotenv from "dotenv"
 import path from "path"
 
 // Carregar variáveis de ambiente
-dotenv.config({ path: path.join(process.cwd(), ".env.local") })
+dotenv.config({ path: path.join(process.cwd(), ".env.local"), debug: false })
 
 // Para Supabase: usar DIRECT_URL para migrations (sem pooler)
 // Para PostgreSQL local: usar DATABASE_URL

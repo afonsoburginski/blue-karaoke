@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { navigateFast } from "@/lib/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,6 +50,17 @@ function LoginContent() {
       }
 
       if (data?.user) {
+        // Limpar sessões antigas após login bem-sucedido
+        try {
+          await fetch("/api/auth/cleanup-sessions", {
+            method: "POST",
+            credentials: "include",
+          })
+        } catch (cleanupError) {
+          console.warn("Erro ao limpar sessões antigas (não crítico):", cleanupError)
+          // Não bloquear o login se houver erro na limpeza
+        }
+
         // Criar slug do nome do usuário
         const slug = createSlug(data.user.name || email.split("@")[0])
         
@@ -64,7 +76,7 @@ function LoginContent() {
 
         // Se for admin, redirecionar direto para dashboard (não precisa de assinatura)
         if (userRole === "admin") {
-          router.push(`/${slug}`)
+          navigateFast(router, `/${slug}`)
           return
         }
 
@@ -79,22 +91,22 @@ function LoginContent() {
             
             // Se tiver assinatura ativa, redirecionar para o perfil (usuários não-admin só podem ver perfil)
             if (subscriptionData.hasSubscription && subscriptionData.subscription?.isActive === true) {
-              router.push(`/${slug}/perfil`)
+              navigateFast(router, `/${slug}/perfil`)
               return
             }
             
             // Se não tiver assinatura ou não estiver ativa, redirecionar para checkout
-            router.push(`/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
+            navigateFast(router, `/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
             return
           }
         } catch (err) {
           console.error("Erro ao verificar assinatura:", err)
-          router.push(`/${slug}/perfil`)
+          navigateFast(router, `/${slug}/perfil`)
           return
         }
 
         // Fallback: se não conseguiu verificar, redirecionar para perfil
-        router.push(`/${slug}/perfil`)
+        navigateFast(router, `/${slug}/perfil`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao fazer login")

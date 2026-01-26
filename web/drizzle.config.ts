@@ -1,7 +1,7 @@
 import type { Config } from "drizzle-kit"
 import * as dotenv from "dotenv"
 
-dotenv.config({ path: ".env.local" })
+dotenv.config({ path: ".env.local", debug: false })
 
 // Para Supabase: usar DIRECT_URL para migrations (sem pooler)
 // Para PostgreSQL local: usar DATABASE_URL

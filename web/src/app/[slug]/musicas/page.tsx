@@ -3,6 +3,9 @@
 import * as React from "react"
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { navigateFast } from "@/lib/navigation"
+import { useMusicas, type Musica as MusicaType } from "@/hooks/use-musicas"
+import { useQueryClient } from "@tanstack/react-query"
 import { useDropzone } from "react-dropzone"
 import {
   flexRender,
@@ -56,26 +59,22 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { Input } from "@/components/ui/input"
 import { useDebounce } from "@/hooks/use-debounce"
 
-interface Musica {
-  id: string
-  codigo: string
-  artista: string
-  titulo: string
-  arquivo: string
-  nomeArquivo?: string | null
-  tamanho?: number | null
-  duracao?: number | null
-  createdAt: string
-  updatedAt: string
-}
+// Usar tipo do hook useMusicas
+type Musica = MusicaType
 
 export default function MusicasPage() {
   const router = useRouter()
   const params = useParams()
   const { user, isLoading: authLoading } = useAuth()
+  const queryClient = useQueryClient()
   const [slug, setSlug] = useState<string | null>(null)
-  const [musics, setMusics] = useState<Musica[]>([])
-  const [loading, setLoading] = useState(true)
+  
+  // Usar React Query para buscar músicas com cache
+  const {
+    data: musics = [],
+  } = useMusicas({
+    enabled: !!user && !!slug,
+  })
   const [files, setFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
@@ -98,35 +97,16 @@ export default function MusicasPage() {
   useEffect(() => {
     if (authLoading) return
     if (!user) {
-      router.push("/login")
+        navigateFast(router, "/login")
       return
     }
     if (slug && user.slug !== slug) {
-      router.push(`/${user.slug}/musicas`)
+      navigateFast(router, `/${user.slug}/musicas`)
       return
     }
   }, [user, slug, authLoading, router])
 
-  useEffect(() => {
-    async function fetchMusicas() {
-      if (!user || !slug) return
-      try {
-        setLoading(true)
-        const response = await fetch("/api/musicas")
-        if (!response.ok) throw new Error("Erro ao buscar músicas")
-        const data = await response.json()
-        setMusics(data.musicas || [])
-      } catch (error) {
-        console.error("Erro ao buscar músicas:", error)
-        setMusics([])
-      } finally {
-        setLoading(false)
-      }
-    }
-    if (user && slug) {
-      fetchMusicas()
-    }
-  }, [user, slug])
+  // Não precisa de fetch manual - React Query gerencia cache automaticamente
 
   const formatDuration = (seconds?: number | null): string => {
     if (!seconds) return "-"
@@ -149,9 +129,18 @@ export default function MusicasPage() {
     try {
       const response = await fetch(`/api/musicas/${id}`, { method: "DELETE" })
       if (!response.ok) throw new Error("Erro ao deletar música")
-      setMusics((prev) => prev.filter((music) => music.id !== id))
+      
+      // Atualização otimista - remover do cache imediatamente
+      queryClient.setQueryData<typeof musics>(["musicas"], (old) => 
+        old ? old.filter((music) => music.id !== id) : []
+      )
+      
+      // Invalidar para refetch em background (caso a API tenha retornado erro)
+      queryClient.invalidateQueries({ queryKey: ["musicas"] })
     } catch (error) {
       console.error("Erro ao deletar música:", error)
+      // Reverter atualização otimista em caso de erro
+      queryClient.invalidateQueries({ queryKey: ["musicas"] })
       alert("Erro ao deletar música. Tente novamente.")
     }
   }
@@ -385,16 +374,9 @@ export default function MusicasPage() {
       }
     }
 
-    // Atualizar lista de músicas
-    try {
-      const response = await fetch("/api/musicas")
-      if (response.ok) {
-        const data = await response.json()
-        setMusics(data.musicas || [])
-      }
-    } catch (error) {
-      console.error("Erro ao atualizar lista de músicas:", error)
-    }
+    // Invalidar cache para refetch em background após upload
+    // Não precisa buscar manualmente - React Query faz isso automaticamente
+    queryClient.invalidateQueries({ queryKey: ["musicas"] })
 
     setUploading(false)
     setFiles([])
@@ -403,12 +385,10 @@ export default function MusicasPage() {
     setDialogOpen(false)
   }
 
-  if (authLoading || loading || !user || !slug) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
+  // Não mostrar loading durante navegação - React Query tem cache
+  // Só renderizar se temos user e slug, caso contrário deixar useEffect redirecionar silenciosamente
+  if (!user || !slug) {
+    return null // Redirecionamento silencioso sem loading
   }
 
   return (

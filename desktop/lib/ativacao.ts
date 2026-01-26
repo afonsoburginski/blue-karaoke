@@ -41,7 +41,7 @@ export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveR
     if (!validarFormatoChave(chaveNormalizada)) {
       return {
         valida: false,
-        error: "Formato de chave inválido",
+        error: "O formato da chave está incorreto. Por favor, use o formato: XXXX-XXXX-XXXX-XXXX",
       }
     }
 
@@ -55,15 +55,21 @@ export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveR
     if (chaveError || !chaveData) {
       return {
         valida: false,
-        error: "Chave de ativação não encontrada",
+        error: "Chave de ativação não encontrada. Verifique se digitou corretamente ou entre em contato com o suporte.",
       }
     }
 
     // Verificar status
     if (chaveData.status !== "ativa") {
+      if (chaveData.status === "expirada") {
+        return {
+          valida: false,
+          error: "Esta chave de ativação expirou. Entre em contato com o suporte para renovar sua assinatura.",
+        }
+      }
       return {
         valida: false,
-        error: "Chave de ativação não está ativa",
+        error: "Esta chave de ativação não está disponível. Entre em contato com o suporte para mais informações.",
       }
     }
 
@@ -81,7 +87,7 @@ export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveR
 
         return {
           valida: false,
-          error: "Chave de ativação expirada",
+          error: "Esta chave de ativação expirou. Entre em contato com o suporte para renovar sua assinatura.",
         }
       }
 
@@ -96,7 +102,7 @@ export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveR
         if (assinaturaError || !assinatura || assinatura.status !== "ativa") {
           return {
             valida: false,
-            error: "Assinatura não está ativa",
+            error: "Sua assinatura não está ativa. Entre em contato com o suporte para reativar sua conta.",
           }
         }
       }
@@ -116,7 +122,7 @@ export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveR
 
           return {
             valida: false,
-            error: "Limite de tempo da chave excedido",
+            error: "O tempo de uso desta chave foi esgotado. Entre em contato com o suporte para adquirir uma nova chave.",
           }
         }
       } else if (chaveData.limite_tempo && !chaveData.data_inicio) {
@@ -220,59 +226,69 @@ export async function validarChaveOnline(chave: string): Promise<ValidacaoChaveR
       user: userData || undefined,
     }
 
-    // Salvar no banco local
+    // Tentar salvar no banco local (cache para funcionar offline)
+    // Se falhar, não impede a validação - o importante é o Supabase
     if (response.valida && response.chave) {
-      await ensureLocalDbInitialized()
-      
-      const nowTimestamp = Date.now()
-      const dataExpiracaoTimestamp = response.chave.dataExpiracao
-        ? new Date(response.chave.dataExpiracao).getTime()
-        : null
+      // Executar de forma assíncrona e não bloquear
+      ;(async () => {
+        try {
+          await ensureLocalDbInitialized()
+          
+          const nowTimestamp = Date.now()
+          const dataExpiracaoTimestamp = response.chave!.dataExpiracao
+            ? new Date(response.chave.dataExpiracao).getTime()
+            : null
 
-      // Verificar se já existe ativação
-      const [existing] = await localDb
-        .select()
-        .from(ativacaoLocal)
-        .where(eq(ativacaoLocal.id, "1"))
-        .limit(1)
+          // Verificar se já existe ativação
+          const [existing] = await localDb
+            .select()
+            .from(ativacaoLocal)
+            .where(eq(ativacaoLocal.id, "1"))
+            .limit(1)
 
-      if (existing) {
-        // Atualizar
-        await localDb
-          .update(ativacaoLocal)
-          .set({
-            chave: response.chave.chave,
-            tipo: response.chave.tipo,
-            diasRestantes: response.chave.diasRestantes,
-            horasRestantes: response.chave.horasRestantes,
-            dataExpiracao: dataExpiracaoTimestamp,
-            dataValidacao: nowTimestamp,
-            updatedAt: nowTimestamp,
-          })
-          .where(eq(ativacaoLocal.id, "1"))
-      } else {
-        // Criar nova
-        await localDb.insert(ativacaoLocal).values({
-          id: "1",
-          chave: response.chave.chave,
-          tipo: response.chave.tipo,
-          diasRestantes: response.chave.diasRestantes,
-          horasRestantes: response.chave.horasRestantes,
-          dataExpiracao: dataExpiracaoTimestamp,
-          dataValidacao: nowTimestamp,
-          createdAt: nowTimestamp,
-          updatedAt: nowTimestamp,
-        })
-      }
+          if (existing) {
+            // Atualizar
+            await localDb
+              .update(ativacaoLocal)
+              .set({
+                chave: response.chave!.chave,
+                tipo: response.chave!.tipo,
+                diasRestantes: response.chave!.diasRestantes,
+                horasRestantes: response.chave!.horasRestantes,
+                dataExpiracao: dataExpiracaoTimestamp,
+                dataValidacao: nowTimestamp,
+                updatedAt: nowTimestamp,
+              })
+              .where(eq(ativacaoLocal.id, "1"))
+          } else {
+            // Criar nova
+            await localDb.insert(ativacaoLocal).values({
+              id: "1",
+              chave: response.chave!.chave,
+              tipo: response.chave!.tipo,
+              diasRestantes: response.chave!.diasRestantes,
+              horasRestantes: response.chave!.horasRestantes,
+              dataExpiracao: dataExpiracaoTimestamp,
+              dataValidacao: nowTimestamp,
+              createdAt: nowTimestamp,
+              updatedAt: nowTimestamp,
+            })
+          }
+        } catch (dbError: any) {
+          // Log do erro mas não falha a validação
+          console.warn("⚠️ Não foi possível salvar no banco local (funcionará apenas online):", dbError.message)
+        }
+      })()
     }
 
+    // Retornar resposta de sucesso baseada na validação do Supabase
     return response
   } catch (error: any) {
     console.error("Erro ao validar chave online:", error)
     
     return {
       valida: false,
-      error: error.message || "Erro de conexão com o banco de dados",
+      error: "Não foi possível validar a chave. Verifique sua conexão com a internet e tente novamente.",
     }
   }
 }

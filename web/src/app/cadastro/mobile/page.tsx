@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { navigateFast } from "@/lib/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,6 +14,9 @@ import { createSlug } from "@/lib/slug"
 
 export default function CadastroMobile() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const planId = searchParams.get("planId")
+  const redirect = searchParams.get("redirect")
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -68,17 +72,22 @@ export default function CadastroMobile() {
               if (subscriptionResponse.ok) {
                 const subscriptionData = await subscriptionResponse.json()
                 
-                // Se não tiver assinatura, ir direto para checkout
-                if (!subscriptionData.hasSubscription || !subscriptionData.subscription?.isActive) {
-                  const slug = createSlug(loginResponse.data.user.name || formData.name)
-                  if (typeof window !== "undefined") {
-                    localStorage.setItem("userEmail", loginResponse.data.user.email)
-                    localStorage.setItem("userName", loginResponse.data.user.name || formData.name)
-                    localStorage.setItem("userSlug", slug)
-                  }
-                  router.push(`/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
-                  return
-                } else {
+                  // Se não tiver assinatura, ir direto para checkout
+                  if (!subscriptionData.hasSubscription || !subscriptionData.subscription?.isActive) {
+                    const slug = createSlug(loginResponse.data.user.name || formData.name)
+                    if (typeof window !== "undefined") {
+                      localStorage.setItem("userEmail", loginResponse.data.user.email)
+                      localStorage.setItem("userName", loginResponse.data.user.name || formData.name)
+                      localStorage.setItem("userSlug", slug)
+                    }
+                    // Se veio da página de preços com planId, redirecionar para preços com checkout
+                    if (planId && redirect === "checkout") {
+                      navigateFast(router, `/preco?planId=${planId}&checkout=true`)
+                    } else {
+                      navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
+                    }
+                    return
+                  } else {
                   // Se tiver assinatura, verificar role e redirecionar
                   const slug = createSlug(loginResponse.data.user.name || formData.name)
                   const userRole = (loginResponse.data.user as any).role || "user"
@@ -91,9 +100,9 @@ export default function CadastroMobile() {
                   
                   // Se for admin, ir para dashboard; se não, ir para perfil
                   if (userRole === "admin") {
-                    router.push(`/${slug}`)
+                    navigateFast(router, `/${slug}`)
                   } else {
-                    router.push(`/${slug}/perfil`)
+                    navigateFast(router, `/${slug}/perfil`)
                   }
                   return
                 }
@@ -103,7 +112,7 @@ export default function CadastroMobile() {
             // Se não conseguir fazer login (senha errada), pedir para fazer login
             setError("Este email já está cadastrado. Faça login para continuar.")
             setTimeout(() => {
-              router.push(`/login?email=${encodeURIComponent(formData.email)}`)
+              navigateFast(router, `/login?email=${encodeURIComponent(formData.email)}`)
             }, 2000)
             return
           }
@@ -118,12 +127,22 @@ export default function CadastroMobile() {
             })
             
             if (loginResponse.data?.user) {
+              // Limpar sessões antigas após login bem-sucedido
+              try {
+                await fetch("/api/auth/cleanup-sessions", {
+                  method: "POST",
+                  credentials: "include",
+                })
+              } catch (cleanupError) {
+                console.warn("Erro ao limpar sessões antigas (não crítico):", cleanupError)
+              }
+
               const userRole = (loginResponse.data.user as any).role || "user"
               const slug = createSlug(loginResponse.data.user.name || formData.name)
               
               // Se for admin, redirecionar para dashboard
               if (userRole === "admin") {
-                router.push(`/${slug}`)
+                navigateFast(router, `/${slug}`)
                 return
               }
               
@@ -138,7 +157,7 @@ export default function CadastroMobile() {
                   
                   // Se tiver assinatura ativa, redirecionar para o perfil
                   if (subscriptionData.hasSubscription && subscriptionData.subscription?.isActive === true) {
-                    router.push(`/${slug}/perfil`)
+                    navigateFast(router, `/${slug}/perfil`)
                     return
                   }
                 }
@@ -147,14 +166,19 @@ export default function CadastroMobile() {
               }
               
               // Se não tiver assinatura ativa, redirecionar para checkout
-              router.push(`/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
+              // Se veio da página de preços com planId, redirecionar para preços com checkout
+              if (planId && redirect === "checkout") {
+                navigateFast(router, `/preco?planId=${planId}&checkout=true`)
+              } else {
+                navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
+              }
               return
             }
           } catch (loginErr) {
             console.error("Erro ao fazer login:", loginErr)
             setError("Este email já está cadastrado. Faça login para continuar.")
             setTimeout(() => {
-              router.push(`/login?email=${encodeURIComponent(formData.email)}`)
+              navigateFast(router, `/login?email=${encodeURIComponent(formData.email)}`)
             }, 2000)
             return
           }
@@ -174,8 +198,13 @@ export default function CadastroMobile() {
           localStorage.setItem("userSlug", slug)
         }
 
-        // Redirecionar para página de checkout
-        router.push(`/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
+        // Se veio da página de preços com planId, redirecionar para preços com checkout
+        if (planId && redirect === "checkout") {
+          navigateFast(router, `/preco?planId=${planId}&checkout=true`)
+        } else {
+          // Caso contrário, redirecionar para página de checkout
+          navigateFast(router, `/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar conta")

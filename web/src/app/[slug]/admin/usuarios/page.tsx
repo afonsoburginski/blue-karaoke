@@ -1,8 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, startTransition } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
+import { useAdminUsuarios, type Usuario } from "@/hooks/use-admin-usuarios"
+import { useQueryClient } from "@tanstack/react-query"
+import { memoryCache } from "@/lib/memory-cache"
+import { navigateFast } from "@/lib/navigation"
 import {
   SidebarProvider,
   SidebarInset,
@@ -27,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Key, Clock, CalendarCheck, Copy, Check, Eye, EyeOff, KeyRound } from "lucide-react"
+import { Plus, Key, Clock, CalendarCheck, Copy, Check, Eye, EyeOff, KeyRound, Trash2 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Dialog,
@@ -49,47 +53,26 @@ import {
 } from "@/components/ui/context-menu"
 import { toast } from "sonner"
 
-interface Usuario {
-  id: string
-  slug: string
-  name: string
-  email: string
-  avatar?: string | null
-  role: string
-  userType: string
-  isActive: boolean
-  createdAt: string
-  diasRestantes: number | null
-  dataAtivacao: string | null
-  assinatura?: {
-    id: string
-    plano: string
-    status: string
-    dataInicio: string
-    dataFim: string
-    valor: number
-    renovacaoAutomatica: boolean
-  } | null
-  chaveAtivacao?: {
-    id: string
-    chave: string
-    tipo: string
-    status: string
-    dataExpiracao: string | null
-    usadoEm: string | null
-    ultimoUso: string | null
-  } | null
-}
-
 export default function AdminUsuariosPage() {
   const router = useRouter()
   const params = useParams()
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading, isRoleLoading } = useAuth()
+  const queryClient = useQueryClient()
   const [slug, setSlug] = useState<string | null>(null)
-  const [usuarios, setUsuarios] = useState<Usuario[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [tipoFilter, setTipoFilter] = useState<string>("all")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [tipoFilter, setTipoFilter] = useState<"subscriber" | "machine" | "all">("all")
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("all")
+  
+  // Usar React Query para buscar usuários com cache
+  // initialData garante que dados do cache aparecem imediatamente
+  const {
+    data: usuarios = [],
+    error,
+    refetch,
+  } = useAdminUsuarios({
+    tipo: tipoFilter,
+    status: statusFilter,
+    enabled: !!user && user.role === "admin" && !!slug,
+  })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
@@ -102,6 +85,10 @@ export default function AdminUsuariosPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [createKeyDialogOpen, setCreateKeyDialogOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedUserChave, setSelectedUserChave] = useState<Usuario["chaveAtivacao"] | null>(null)
+  const [isEditingKey, setIsEditingKey] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<Usuario | null>(null)
   const [keyFormData, setKeyFormData] = useState({
     tipo: "assinatura" as "assinatura" | "maquina",
     dataExpiracao: "",
@@ -155,46 +142,25 @@ export default function AdminUsuariosPage() {
 
   useEffect(() => {
     // Não fazer nada enquanto está carregando
-    if (authLoading) return
+    if (authLoading || isRoleLoading) return
 
     // Aguardar um pouco para garantir que a sessão foi carregada
     const timeoutId = setTimeout(() => {
       if (!user) {
-        router.push("/login")
+        navigateFast(router, "/login")
         return
       }
 
+      // Se não for admin, redirecionar
       if (user.role !== "admin") {
-        router.push(`/${user.slug}`)
+        navigateFast(router, `/${user.slug}`)
         return
       }
 
-      if (slug) {
-        fetchUsuarios()
-      }
     }, 100)
 
     return () => clearTimeout(timeoutId)
-  }, [user, slug, authLoading, router, tipoFilter, statusFilter])
-
-  const fetchUsuarios = async () => {
-    try {
-      setIsLoading(true)
-      const params = new URLSearchParams()
-      if (tipoFilter !== "all") params.append("tipo", tipoFilter)
-      if (statusFilter !== "all") params.append("status", statusFilter)
-
-      const response = await fetch(`/api/admin/usuarios?${params.toString()}`)
-      if (response.ok) {
-        const data = await response.json()
-        setUsuarios(data.usuarios || [])
-      }
-    } catch (error) {
-      console.error("Erro ao buscar usuários:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  }, [user, slug, authLoading, isRoleLoading, router])
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -220,7 +186,9 @@ export default function AdminUsuariosPage() {
         userType: "subscriber",
         role: "user",
       })
-      fetchUsuarios()
+      // Invalidar cache do React Query E cache em memória
+      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
+      memoryCache.invalidatePrefix("admin:usuarios")
       toast.success("Usuário criado com sucesso!")
     } catch (error) {
       console.error("Erro ao criar usuário:", error)
@@ -272,8 +240,12 @@ export default function AdminUsuariosPage() {
         limiteTempo: "",
       })
       setSelectedUserId(null)
-      fetchUsuarios()
-      toast.success("Chave de ativação criada com sucesso!")
+      setSelectedUserChave(null)
+      setIsEditingKey(false)
+      // Invalidar cache do React Query E cache em memória
+      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
+      memoryCache.invalidatePrefix("admin:usuarios")
+      toast.success(data.message || (isEditingKey ? "Chave atualizada com sucesso!" : "Chave de ativação criada com sucesso!"))
     } catch (error) {
       console.error("Erro ao criar chave:", error)
       toast.error("Erro ao criar chave")
@@ -281,16 +253,75 @@ export default function AdminUsuariosPage() {
   }
 
   const openCreateKeyDialog = (userId: string) => {
+    const usuario = usuarios.find(u => u.id === userId)
+    const hasChave = usuario?.chaveAtivacao
+    
     setSelectedUserId(userId)
+    setSelectedUserChave(hasChave || null)
+    setIsEditingKey(!!hasChave)
+    
+    // Preencher formulário com dados existentes se estiver editando
+    if (hasChave) {
+      setKeyFormData({
+        tipo: hasChave.tipo as "assinatura" | "maquina",
+        dataExpiracao: hasChave.dataExpiracao 
+          ? new Date(hasChave.dataExpiracao).toISOString().split("T")[0]
+          : "",
+        limiteTempo: hasChave.limiteTempo?.toString() || "",
+      })
+    } else {
+      setKeyFormData({
+        tipo: "assinatura",
+        dataExpiracao: "",
+        limiteTempo: "",
+      })
+    }
+    
     setCreateKeyDialogOpen(true)
   }
 
-  if (authLoading || isLoading || !user || !slug || user.role !== "admin") {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-xl">Carregando...</div>
-      </div>
-    )
+  const openDeleteDialog = (usuario: Usuario) => {
+    setUserToDelete(usuario)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return
+
+    try {
+      const response = await fetch(`/api/admin/delete-user?email=${encodeURIComponent(userToDelete.email)}`, {
+        method: "DELETE",
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        toast.error(data.error || "Erro ao deletar usuário")
+        return
+      }
+
+      setDeleteDialogOpen(false)
+      setUserToDelete(null)
+      // Invalidar cache do React Query E cache em memória
+      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
+      memoryCache.invalidatePrefix("admin:usuarios")
+      toast.success(`Usuário ${userToDelete.name} deletado com sucesso!`)
+    } catch (error) {
+      console.error("Erro ao deletar usuário:", error)
+      toast.error("Erro ao deletar usuário")
+    }
+  }
+
+  // Só mostrar loading se realmente não temos dados essenciais ou se está carregando role
+  // Não mostrar loading durante navegação - React Query tem cache
+  // Só renderizar se temos user e slug, caso contrário deixar useEffect redirecionar silenciosamente
+  if (!user || !slug) {
+    return null // Redirecionamento silencioso sem loading
+  }
+
+  // Se não for admin, não renderizar nada enquanto redireciona (o useEffect já cuida do redirect)
+  if (user.role !== "admin") {
+    return null // Redirecionamento silencioso
   }
 
   return (
@@ -319,7 +350,10 @@ export default function AdminUsuariosPage() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <Select value={tipoFilter} onValueChange={setTipoFilter}>
+                <Select 
+                  value={tipoFilter} 
+                  onValueChange={(value) => setTipoFilter(value as "subscriber" | "machine" | "all")}
+                >
                   <SelectTrigger className="w-[140px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -329,7 +363,10 @@ export default function AdminUsuariosPage() {
                     <SelectItem value="machine">Máquinas</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select 
+                  value={statusFilter} 
+                  onValueChange={(value) => setStatusFilter(value as "active" | "inactive" | "all")}
+                >
                   <SelectTrigger className="w-[140px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -419,12 +456,62 @@ export default function AdminUsuariosPage() {
               </div>
             </CardHeader>
             {/* Dialog para criar chave de ativação */}
-            <Dialog open={createKeyDialogOpen} onOpenChange={setCreateKeyDialogOpen}>
+            {/* Dialog de Confirmação de Deleção */}
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Criar Chave de Ativação</DialogTitle>
+                  <DialogTitle>Confirmar Exclusão</DialogTitle>
                   <DialogDescription>
-                    Crie uma chave de ativação manualmente para o usuário selecionado
+                    Tem certeza que deseja deletar o usuário <strong>{userToDelete?.name}</strong> ({userToDelete?.email})?
+                    <br />
+                    <br />
+                    Esta ação não pode ser desfeita. Todas as assinaturas, histórico e dados relacionados serão removidos permanentemente.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex gap-2 justify-end mt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setDeleteDialogOpen(false)
+                      setUserToDelete(null)
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDeleteUser}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Deletar
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={createKeyDialogOpen} onOpenChange={(open) => {
+              setCreateKeyDialogOpen(open)
+              if (!open) {
+                setKeyFormData({
+                  tipo: "assinatura",
+                  dataExpiracao: "",
+                  limiteTempo: "",
+                })
+                setSelectedUserId(null)
+                setSelectedUserChave(null)
+                setIsEditingKey(false)
+              }
+            }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{isEditingKey ? "Editar Chave de Ativação" : "Criar Chave de Ativação"}</DialogTitle>
+                  <DialogDescription>
+                    {isEditingKey 
+                      ? "Edite a data de expiração ou limite de tempo da chave existente"
+                      : "Crie uma chave de ativação manualmente para o usuário selecionado"
+                    }
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateKey} className="space-y-4">
@@ -435,6 +522,7 @@ export default function AdminUsuariosPage() {
                       onValueChange={(value) =>
                         setKeyFormData({ ...keyFormData, tipo: value as "assinatura" | "maquina" })
                       }
+                      disabled={isEditingKey}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -444,6 +532,11 @@ export default function AdminUsuariosPage() {
                         <SelectItem value="maquina">Máquina</SelectItem>
                       </SelectContent>
                     </Select>
+                    {isEditingKey && (
+                      <p className="text-xs text-muted-foreground">
+                        O tipo de chave não pode ser alterado
+                      </p>
+                    )}
                   </div>
 
                   {keyFormData.tipo === "assinatura" ? (
@@ -495,6 +588,8 @@ export default function AdminUsuariosPage() {
                           limiteTempo: "",
                         })
                         setSelectedUserId(null)
+                        setSelectedUserChave(null)
+                        setIsEditingKey(false)
                       }}
                       className="flex-1"
                     >
@@ -502,7 +597,7 @@ export default function AdminUsuariosPage() {
                     </Button>
                     <Button type="submit" className="flex-1">
                       <KeyRound className="h-4 w-4 mr-2" />
-                      Criar Chave
+                      {isEditingKey ? "Salvar Alterações" : "Criar Chave"}
                     </Button>
                   </div>
                 </form>
@@ -522,7 +617,13 @@ export default function AdminUsuariosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {usuarios.length > 0 ? (
+                  {error ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <div className="text-destructive">Erro ao carregar usuários. Tente novamente.</div>
+                      </TableCell>
+                    </TableRow>
+                  ) : usuarios.length > 0 ? (
                     usuarios.map((usuario) => (
                       <ContextMenu key={usuario.id}>
                         <ContextMenuTrigger asChild>
@@ -649,7 +750,15 @@ export default function AdminUsuariosPage() {
                             className="cursor-pointer"
                           >
                             <KeyRound className="h-4 w-4 mr-2" />
-                            Criar Chave de Ativação
+                            {usuario.chaveAtivacao ? "Editar Chave de Ativação" : "Criar Chave de Ativação"}
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            onClick={() => openDeleteDialog(usuario)}
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Deletar Usuário
                           </ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>

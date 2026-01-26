@@ -2,10 +2,13 @@ import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 import * as schema from "./schema"
 import * as dotenv from "dotenv"
+
+// Suprimir mensagens do dotenv
+process.env.DOTENV_CONFIG_QUIET = "true"
 import path from "path"
 
-// Carregar .env.local
-dotenv.config({ path: path.join(process.cwd(), ".env.local") })
+// Carregar .env.local silenciosamente
+dotenv.config({ path: path.join(process.cwd(), ".env.local"), debug: false })
 
 // Para Supabase: usar DATABASE_URL (pooler) para queries normais
 // Para PostgreSQL local: usar DATABASE_URL

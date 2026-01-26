@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db, estatisticas, users, musicas, historico, assinaturas, postgresClient } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { eq, sql, count, and, gte, lte, or } from "drizzle-orm"
+import { eq, sql, count, and, gte, lte, or, desc } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const mesReferencia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
 
-    // Buscar estatísticas em cache
+    // Buscar estatísticas em cache usando índice composto (user_id, mes_referencia)
+    // O índice idx_estatisticas_user_mes otimiza esta query
     let [cachedStats] = await db
       .select()
       .from(estatisticas)
@@ -30,54 +31,58 @@ export async function GET(request: NextRequest) {
       )
       .limit(1)
 
-    // Se não existir ou estiver desatualizado (mais de 1 hora), recalcular
+    // Se não existir ou estiver desatualizado (mais de 5 minutos), recalcular
+    // Reduzido de 1 hora para 5 minutos para balancear performance e atualização
     const shouldRecalculate =
       !cachedStats ||
       cachedStats.mesReferencia !== mesReferencia ||
       (cachedStats.updatedAt &&
-        new Date(cachedStats.updatedAt).getTime() < now.getTime() - 60 * 60 * 1000)
+        new Date(cachedStats.updatedAt).getTime() < now.getTime() - 5 * 60 * 1000)
 
     if (shouldRecalculate) {
-      // Calcular estatísticas reais
-      const totalUsuarios = await db
-        .select({ count: count() })
-        .from(users)
-
-      const totalMusicas = await db
-        .select({ count: count() })
-        .from(musicas)
-
-      const totalGbResult = await db
-        .select({
-          total: sql<number>`COALESCE(SUM(${musicas.tamanho}), 0)`,
-        })
-        .from(musicas)
-
-      const totalGb = Math.round((totalGbResult[0]?.total || 0) / (1024 * 1024 * 1024))
-
-      // Calcular receita mensal real: somar valores de assinaturas criadas no mês atual
-      // Excluir assinaturas de admins (role = 'admin')
-      // Usar SQL direto para comparação de datas mais confiável
-      const receitaQuery = await postgresClient`
-        SELECT COALESCE(SUM(a.valor), 0)::int as total
-        FROM assinaturas a
-        INNER JOIN users u ON u.id = a.user_id
-        WHERE 
-          (a.status = 'ativa' OR a.status = 'pendente')
-          AND u.role != 'admin'
-          AND a.data_inicio >= DATE_TRUNC('month', CURRENT_DATE)
-          AND a.data_inicio < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+      
+      // Usar uma única query SQL otimizada para calcular todas as estatísticas
+      // Isso é muito mais eficiente que múltiplas queries separadas
+      const statsQuery = await postgresClient`
+        WITH user_count AS (
+          SELECT COUNT(*)::int as total FROM users
+        ),
+        music_count AS (
+          SELECT COUNT(*)::int as total FROM musicas
+        ),
+        storage_total AS (
+          SELECT COALESCE(SUM(tamanho), 0)::bigint as total FROM musicas
+        ),
+        revenue_total AS (
+          SELECT COALESCE(SUM(a.valor), 0)::int as total
+          FROM assinaturas a
+          INNER JOIN users u ON u.id = a.user_id
+          WHERE 
+            (a.status = 'ativa' OR a.status = 'pendente')
+            AND u.role != 'admin'
+            AND a.data_inicio >= DATE_TRUNC('month', CURRENT_DATE)
+            AND a.data_inicio < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+        )
+        SELECT 
+          (SELECT total FROM user_count) as total_usuarios,
+          (SELECT total FROM music_count) as total_musicas,
+          (SELECT total FROM storage_total) as total_bytes,
+          (SELECT total FROM revenue_total) as receita_mensal
       `
       
-      const receitaMensal = Number(receitaQuery[0]?.total || 0)
+      const stats = statsQuery[0]
+      const totalUsuarios = stats?.total_usuarios || 0
+      const totalMusicas = stats?.total_musicas || 0
+      const totalGb = Math.round(Number(stats?.total_bytes || 0) / (1024 * 1024 * 1024))
+      const receitaMensal = Number(stats?.receita_mensal || 0)
 
       // Salvar ou atualizar cache
       if (cachedStats) {
-        [cachedStats] = await db
+        const updated = await db
           .update(estatisticas)
           .set({
-            totalUsuarios: totalUsuarios[0]?.count || 0,
-            totalMusicas: totalMusicas[0]?.count || 0,
+            totalUsuarios,
+            totalMusicas,
             totalGb,
             receitaMensal,
             mesReferencia,
@@ -85,22 +90,25 @@ export async function GET(request: NextRequest) {
           })
           .where(eq(estatisticas.id, cachedStats.id))
           .returning()
+        cachedStats = updated[0] || cachedStats
       } else {
-        [cachedStats] = await db
+        const inserted = await db
           .insert(estatisticas)
           .values({
             userId: currentUser.userId,
-            totalUsuarios: totalUsuarios[0]?.count || 0,
-            totalMusicas: totalMusicas[0]?.count || 0,
+            totalUsuarios,
+            totalMusicas,
             totalGb,
             receitaMensal,
             mesReferencia,
           })
           .returning()
+        cachedStats = inserted[0]
       }
     }
 
     // Estatísticas do histórico do usuário
+    // O índice idx_historico_user_data otimiza estas queries
     const userHistory = await db
       .select({
         totalSessoes: count(),
@@ -112,7 +120,7 @@ export async function GET(request: NextRequest) {
       .select()
       .from(historico)
       .where(eq(historico.userId, currentUser.userId))
-      .orderBy(sql`${historico.dataExecucao} DESC`)
+      .orderBy(desc(historico.dataExecucao))
       .limit(1)
 
     return NextResponse.json({

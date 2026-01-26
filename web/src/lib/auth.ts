@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "./db"
 import { username } from "better-auth/plugins"
 import { env } from "./env"
+import bcrypt from "bcryptjs"
 
 import { createSlug } from "./slug"
 
@@ -12,31 +13,23 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
-    // Hook após login para garantir que role e slug estejam disponíveis
-    async afterSignIn({ user }) {
-      // Buscar dados completos do usuário do banco
-      const { db, users } = await import("./db")
-      const { eq } = await import("drizzle-orm")
-      
-      const [fullUser] = await db
-        .select({
-          role: users.role,
-          slug: users.slug,
-        })
-        .from(users)
-        .where(eq(users.id, user.id))
-        .limit(1)
-      
-      if (fullUser) {
-        // Adicionar role e slug ao objeto user retornado
-        return {
-          ...user,
-          role: fullUser.role,
-          slug: fullUser.slug,
+    // Configurar bcrypt para compatibilidade com senhas existentes
+    password: {
+      hash: async (password: string) => {
+        return await bcrypt.hash(password, 10)
+      },
+      verify: async (data: { password: string; hash: string }) => {
+        // Validar que temos ambos os parâmetros
+        if (!data.password || !data.hash || typeof data.hash !== 'string') {
+          return false
         }
-      }
-      
-      return user
+        try {
+          return await bcrypt.compare(data.password, data.hash)
+        } catch (error) {
+          console.error("Erro ao verificar senha:", error)
+          return false
+        }
+      },
     },
   },
   plugins: [
@@ -51,9 +44,19 @@ export const auth = betterAuth({
       name: "name",
       image: "image",
       emailVerified: "emailVerified",
-      slug: "slug", // Adicionar slug aos campos do usuário
-      role: "role", // Adicionar role aos campos do usuário
+      // slug e role estão em additionalFields abaixo
       // password não está em users - Better Auth armazena na tabela 'account'
+    },
+    // Incluir role e slug na sessão automaticamente
+    additionalFields: {
+      role: {
+        type: "string",
+        input: false, // Não permitir que usuários definam role durante registro
+      },
+      slug: {
+        type: "string",
+        input: false, // Não permitir que usuários definam slug durante registro
+      },
     },
     // Hook para criar slug automaticamente após criação
     async afterCreate(user: any) {
@@ -74,11 +77,19 @@ export const auth = betterAuth({
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
+    expiresIn: 60 * 60 * 24 * 7, // 7 dias
+    updateAge: 60 * 60 * 24, // Atualizar sessão a cada 24 horas
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60, // 5 minutos
+    },
+    // Configurações de cookie para persistir entre sessões do navegador
+    cookieOptions: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 dias
+      path: "/",
     },
   },
   trustedOrigins: [

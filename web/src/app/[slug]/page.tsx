@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { navigateFast } from "@/lib/navigation"
 import { useAuth } from "@/hooks/use-auth"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   SidebarProvider,
   SidebarInset,
@@ -38,6 +40,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const params = useParams()
   const { user, isLoading: authLoading } = useAuth()
+  const queryClient = useQueryClient()
   const [slug, setSlug] = useState<string | null>(null)
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "year">("week")
   const [newUsers, setNewUsers] = useState<any[]>([])
@@ -83,7 +86,7 @@ export default function DashboardPage() {
       const currentUser = user // Capturar valor atual
       
       if (!currentUser) {
-        router.push("/login")
+        navigateFast(router, "/login")
         return
       }
 
@@ -95,9 +98,9 @@ export default function DashboardPage() {
         // Redirecionar para o perfil
         const currentSlug = currentUser?.slug
         if (currentSlug) {
-          router.push(`/${currentSlug}/perfil`)
+          navigateFast(router, `/${currentSlug}/perfil`)
         } else {
-          router.push("/login")
+          navigateFast(router, "/login")
         }
         return
       }
@@ -105,7 +108,7 @@ export default function DashboardPage() {
       // Verificar slug antes de continuar
       const currentSlug = currentUser?.slug
       if (slug && currentSlug && currentSlug !== slug) {
-        router.push(`/${currentSlug}`)
+        navigateFast(router, `/${currentSlug}`)
         return
       }
 
@@ -166,18 +169,22 @@ export default function DashboardPage() {
     return () => clearTimeout(timeoutId)
   }, [user, slug, authLoading, router])
 
-  // Callbacks memoizados para Realtime
+  // Callbacks memoizados para Realtime - atualizar cache granularmente
   const handleHistoricoChange = useCallback(() => {
-    refetchStats()
-    refetchTopMusics()
-  }, [refetchStats, refetchTopMusics])
+    // Invalidar apenas queries relacionadas ao histórico
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "topMusics"] })
+  }, [queryClient])
 
   const handleMusicasChange = useCallback(() => {
-    refetchStats()
-  }, [refetchStats])
+    // Invalidar apenas queries relacionadas a músicas
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
+    queryClient.invalidateQueries({ queryKey: ["musicas"] })
+  }, [queryClient])
 
   const handleUsersChange = useCallback(() => {
     if (user && user.role === "admin") {
+      // Buscar novos usuários apenas se necessário (não bloquear UI)
       fetch("/api/estatisticas/novos-usuarios?limit=5", {
         credentials: "include",
         headers: {
@@ -196,16 +203,18 @@ export default function DashboardPage() {
           }
         })
         .catch((error) => {
-          console.error("Erro ao buscar novos usuários:", error)
           // Não mostrar erro ao usuário, apenas logar
         })
     }
-    refetchStats()
-  }, [user, refetchStats])
+    // Invalidar apenas queries relacionadas a usuários
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
+    queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
+  }, [user, queryClient])
 
   const handleEstatisticasChange = useCallback(() => {
-    refetchStats()
-  }, [refetchStats])
+    // Invalidar apenas estatísticas
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
+  }, [queryClient])
 
   // Realtime para dashboard
   useRealtimeDashboard({
@@ -216,15 +225,12 @@ export default function DashboardPage() {
     onEstatisticasChange: handleEstatisticasChange,
   })
 
-  const isLoading =
-    authLoading || statsLoading || topMusicsLoading || storageLoading || !user || !slug
-
-  if (isLoading || !user || !slug || !stats) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-xl">Carregando...</div>
-      </div>
-    )
+  // Só mostrar loading se realmente não temos dados essenciais
+  // Não bloquear a UI se apenas algumas queries estão carregando
+  // Não mostrar loading durante navegação - React Query tem cache
+  // Só renderizar se temos user e slug, caso contrário deixar useEffect redirecionar silenciosamente
+  if (!user || !slug) {
+    return null // Redirecionamento silencioso sem loading
   }
 
   return (
@@ -252,7 +258,9 @@ export default function DashboardPage() {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalUsuarios.toLocaleString()}</div>
+                <div className="text-2xl font-bold">
+                  {stats?.totalUsuarios?.toLocaleString() ?? "0"}
+                </div>
                 <p className="text-xs text-muted-foreground">Usuários cadastrados</p>
               </CardContent>
             </Card>
@@ -263,7 +271,9 @@ export default function DashboardPage() {
                 <Music className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalMusicas.toLocaleString()}</div>
+                <div className="text-2xl font-bold">
+                  {stats?.totalMusicas?.toLocaleString() ?? "0"}
+                </div>
                 <p className="text-xs text-muted-foreground">Músicas no catálogo</p>
               </CardContent>
             </Card>
@@ -279,7 +289,9 @@ export default function DashboardPage() {
                 <HardDrive className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalGb.toFixed(1)} GB</div>
+                <div className="text-2xl font-bold">
+                  {stats?.totalGb ? `${stats.totalGb.toFixed(1)} GB` : "0 GB"}
+                </div>
                 {storageUsage && (
                   <p className="text-xs text-muted-foreground mt-1">
                     R2: {storageUsage.totalGb.toFixed(2)} GB em{" "}
@@ -289,7 +301,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   className="mt-2 text-[11px] text-primary underline-offset-2 hover:underline"
-                  onClick={() => refetchStorage()}
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ["storage", "usage"] })}
                 >
                   Recarregar uso do storage
                 </button>
@@ -303,14 +315,14 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  R$ {(stats.receitaMensal / 100).toLocaleString()}
+                  R$ {stats?.receitaMensal ? (stats.receitaMensal / 100).toLocaleString() : "0"}
                 </div>
                 <button
                   type="button"
                   className="mt-2 text-[11px] text-primary underline-offset-2 hover:underline"
                   onClick={() => {
-                    refetchStats()
-                    refetchTopMusics()
+                    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
+                    queryClient.invalidateQueries({ queryKey: ["dashboard", "topMusics"] })
                   }}
                 >
                   Atualizar estatísticas
@@ -395,7 +407,7 @@ export default function DashboardPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => router.push(`/${slug}/admin/usuarios`)}
+                  onClick={() => navigateFast(router, `/${slug}/admin/usuarios`)}
                   className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
                 >
                   Ver todos

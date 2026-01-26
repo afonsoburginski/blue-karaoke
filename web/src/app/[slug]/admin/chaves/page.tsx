@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
+import { navigateFast } from "@/lib/navigation"
 import {
   SidebarProvider,
   SidebarInset,
@@ -61,7 +62,7 @@ interface Chave {
 export default function AdminChavesPage() {
   const router = useRouter()
   const params = useParams()
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading, isRoleLoading } = useAuth()
   const [slug, setSlug] = useState<string | null>(null)
   const [chaves, setChaves] = useState<Chave[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -86,20 +87,22 @@ export default function AdminChavesPage() {
   }, [params])
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login")
+    if (authLoading || isRoleLoading) return
+
+    if (!user) {
+      navigateFast(router, "/login")
       return
     }
 
-    if (user && user.role !== "admin") {
-      router.push(`/${user.slug}`)
+    if (user.role !== "admin") {
+      navigateFast(router, `/${user.slug}`)
       return
     }
 
     if (user && slug) {
       fetchChaves()
     }
-  }, [user, slug, authLoading, router, tipoFilter, statusFilter])
+  }, [user, slug, authLoading, isRoleLoading, router, tipoFilter, statusFilter])
 
   const fetchChaves = async () => {
     try {
@@ -177,21 +180,28 @@ export default function AdminChavesPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (authLoading || isLoading || !user || !slug || user.role !== "admin") {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-xl">Carregando...</div>
-      </div>
-    )
+  // Não mostrar loading durante navegação - React Query tem cache
+  // Só renderizar se temos user e slug, caso contrário deixar useEffect redirecionar silenciosamente
+  if (!user || !slug) {
+    return null // Redirecionamento silencioso sem loading
   }
+
+  // Se não for admin, não renderizar nada enquanto redireciona (o useEffect já cuida do redirect)
+  if (user.role !== "admin") {
+    return null // Redirecionamento silencioso
+  }
+
+  // TypeScript: user e slug garantidamente não são null aqui
+  const safeUser = user
+  const safeSlug = slug
 
   return (
     <SidebarProvider>
       <DashboardSidebar
-        userName={user.name}
-        userEmail={user.email}
-        slug={slug}
-        userRole={user.role}
+        userName={safeUser.name}
+        userEmail={safeUser.email}
+        slug={safeSlug}
+        userRole={safeUser.role}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">

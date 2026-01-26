@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
+import { navigateFast } from "@/lib/navigation"
 import { useDropzone } from "react-dropzone"
 import {
   SidebarProvider,
@@ -69,12 +70,12 @@ export default function PerfilPage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push("/login")
+      navigateFast(router, "/login")
       return
     }
 
     if (user && slug && user.slug !== slug) {
-      router.push(`/${user.slug}/perfil`)
+      navigateFast(router, `/${user.slug}/perfil`)
       return
     }
 
@@ -209,12 +210,11 @@ export default function PerfilPage() {
     }
   }
 
-  if (authLoading || !user || !slug) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-xl">Carregando...</div>
-      </div>
-    )
+  // Só mostrar loading se realmente não temos dados essenciais
+  // Não mostrar loading durante navegação - React Query tem cache
+  // Só renderizar se temos user e slug, caso contrário deixar useEffect redirecionar silenciosamente
+  if (!user || !slug) {
+    return null // Redirecionamento silencioso sem loading
   }
 
   return (

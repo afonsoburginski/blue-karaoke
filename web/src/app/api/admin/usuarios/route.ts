@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db, users, assinaturas, account, chavesAtivacao } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { eq, desc, and } from "drizzle-orm"
+import { eq, desc, and, inArray } from "drizzle-orm"
 import { hashPassword } from "@/lib/auth"
 import { createSlug } from "@/lib/slug"
 import { createId } from "@paralleldrive/cuid2"
@@ -25,7 +25,14 @@ export async function GET(request: NextRequest) {
       .where(eq(users.id, currentUser.userId))
       .limit(1)
 
-    if (!user || user.role !== "admin") {
+    if (!user) {
+      return NextResponse.json(
+        { error: "Usuário não encontrado" },
+        { status: 404 }
+      )
+    }
+
+    if (user.role !== "admin") {
       return NextResponse.json(
         { error: "Acesso negado. Apenas administradores." },
         { status: 403 }
@@ -47,102 +54,140 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(users.isActive, status === "active"))
     }
 
-    // Query otimizada com LEFT JOIN
-    const allUsersQuery = db
-      .select({
-        // Dados do usuário
-        id: users.id,
-        slug: users.slug,
-        name: users.name,
-        email: users.email,
-        avatar: users.avatar,
-        role: users.role,
-        userType: users.userType,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        // Dados da assinatura
-        assinaturaId: assinaturas.id,
-        assinaturaPlano: assinaturas.plano,
-        assinaturaStatus: assinaturas.status,
-        assinaturaDataInicio: assinaturas.dataInicio,
-        assinaturaDataFim: assinaturas.dataFim,
-        assinaturaValor: assinaturas.valor,
-        assinaturaRenovacao: assinaturas.renovacaoAutomatica,
-        // Dados da chave de ativação
-        chaveId: chavesAtivacao.id,
-        chave: chavesAtivacao.chave,
-        chaveTipo: chavesAtivacao.tipo,
-        chaveStatus: chavesAtivacao.status,
-        chaveDataExpiracao: chavesAtivacao.dataExpiracao,
-        chaveUsadoEm: chavesAtivacao.usadoEm,
-        chaveUltimoUso: chavesAtivacao.ultimoUso,
-      })
+    // Buscar usuários primeiro
+    // Os índices idx_users_type_active e idx_users_role otimizam estas queries
+    let usersQuery = db
+      .select()
       .from(users)
-      .leftJoin(assinaturas, eq(assinaturas.userId, users.id))
-      .leftJoin(chavesAtivacao, eq(chavesAtivacao.userId, users.id))
-      .orderBy(desc(users.createdAt))
 
-    const allUsers = conditions.length > 0
-      ? await allUsersQuery.where(and(...conditions))
-      : await allUsersQuery
+    if (conditions.length > 0) {
+      usersQuery = usersQuery.where(and(...conditions)) as typeof usersQuery
+    }
 
-    // Processar resultados
-    const usersWithDetails = allUsers.map((row) => {
-      // Calcular dias restantes
-      let diasRestantes: number | null = null
-      let dataAtivacao: Date | null = null
+    const allUsersData = await usersQuery.orderBy(desc(users.createdAt))
 
-      if (row.assinaturaDataFim) {
-        const hoje = new Date()
-        const dataFim = new Date(row.assinaturaDataFim)
-        const diffTime = dataFim.getTime() - hoje.getTime()
-        diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-        if (diasRestantes < 0) diasRestantes = 0
-        dataAtivacao = row.assinaturaDataInicio ? new Date(row.assinaturaDataInicio) : null
-      } else if (row.chaveDataExpiracao) {
-        const hoje = new Date()
-        const dataFim = new Date(row.chaveDataExpiracao)
-        const diffTime = dataFim.getTime() - hoje.getTime()
-        diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-        if (diasRestantes < 0) diasRestantes = 0
-        dataAtivacao = row.chaveUsadoEm ? new Date(row.chaveUsadoEm) : null
+    // Otimizar: buscar todas as assinaturas e chaves de uma vez usando inArray
+    // Os índices idx_assinaturas_user_created e idx_chaves_user_created otimizam estas queries
+    const userIds = allUsersData.map(u => u.id)
+    
+    // Buscar todas as assinaturas relevantes de uma vez
+    const allAssinaturas = userIds.length > 0 ? await db
+      .select()
+      .from(assinaturas)
+      .where(inArray(assinaturas.userId, userIds))
+      .orderBy(desc(assinaturas.createdAt)) : []
+
+    // Buscar todas as chaves relevantes de uma vez
+    // Buscar chaves onde userId está na lista OU é null (chaves não associadas ainda)
+    const allChaves = userIds.length > 0 ? await db
+      .select()
+      .from(chavesAtivacao)
+      .where(inArray(chavesAtivacao.userId, userIds))
+      .orderBy(desc(chavesAtivacao.createdAt)) : []
+
+
+    // Criar mapas para acesso rápido O(1)
+    const assinaturasMap = new Map<string, typeof allAssinaturas[0]>()
+    for (const assinatura of allAssinaturas) {
+      if (!assinaturasMap.has(assinatura.userId)) {
+        assinaturasMap.set(assinatura.userId, assinatura)
       }
+    }
 
-      return {
-        id: row.id,
-        slug: row.slug,
-        name: row.name,
-        email: row.email,
-        avatar: row.avatar,
-        role: row.role,
-        userType: row.userType,
-        isActive: row.isActive,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        assinatura: row.assinaturaId ? {
-          id: row.assinaturaId,
-          plano: row.assinaturaPlano,
-          status: row.assinaturaStatus,
-          dataInicio: row.assinaturaDataInicio,
-          dataFim: row.assinaturaDataFim,
-          valor: row.assinaturaValor,
-          renovacaoAutomatica: row.assinaturaRenovacao,
-        } : null,
-        chaveAtivacao: row.chaveId ? {
-          id: row.chaveId,
-          chave: row.chave,
-          tipo: row.chaveTipo,
-          status: row.chaveStatus,
-          dataExpiracao: row.chaveDataExpiracao,
-          usadoEm: row.chaveUsadoEm,
-          ultimoUso: row.chaveUltimoUso,
-        } : null,
-        diasRestantes,
-        dataAtivacao,
+    const chavesMap = new Map<string, typeof allChaves[0]>()
+    for (const chave of allChaves) {
+      // Garantir que userId existe e usar a chave mais recente (já ordenado por createdAt DESC)
+      if (chave.userId) {
+        // Se já existe uma chave para este userId, manter a mais recente (primeira do array ordenado)
+        if (!chavesMap.has(chave.userId)) {
+          chavesMap.set(chave.userId, chave)
+        }
+      }
+    }
+
+
+    // Para cada usuário, buscar assinatura e chave mais recente dos mapas
+    const usersWithDetails = allUsersData.map((user) => {
+      try {
+        const assinatura = assinaturasMap.get(user.id) || null
+        const chave = chavesMap.get(user.id) || null
+        
+
+        // Calcular dias restantes
+        let diasRestantes: number | null = null
+        let dataAtivacao: Date | null = null
+
+        if (assinatura?.dataFim) {
+          const hoje = new Date()
+          const dataFim = new Date(assinatura.dataFim)
+          const diffTime = dataFim.getTime() - hoje.getTime()
+          diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          if (diasRestantes < 0) diasRestantes = 0
+          dataAtivacao = assinatura.dataInicio ? new Date(assinatura.dataInicio) : null
+        } else if (chave?.dataExpiracao) {
+          const hoje = new Date()
+          const dataFim = new Date(chave.dataExpiracao)
+          const diffTime = dataFim.getTime() - hoje.getTime()
+          diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          if (diasRestantes < 0) diasRestantes = 0
+          dataAtivacao = chave.usadoEm ? new Date(chave.usadoEm) : null
+        }
+
+        return {
+          id: user.id,
+          slug: user.slug,
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar,
+          role: user.role,
+          userType: user.userType,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          assinatura: assinatura ? {
+            id: assinatura.id,
+            plano: assinatura.plano,
+            status: assinatura.status,
+            dataInicio: assinatura.dataInicio,
+            dataFim: assinatura.dataFim,
+            valor: assinatura.valor,
+            renovacaoAutomatica: assinatura.renovacaoAutomatica,
+          } : null,
+          chaveAtivacao: chave ? {
+            id: chave.id,
+            chave: chave.chave,
+            tipo: chave.tipo,
+            status: chave.status,
+            dataExpiracao: chave.dataExpiracao,
+            usadoEm: chave.usadoEm,
+            ultimoUso: chave.ultimoUso,
+          } : null,
+          diasRestantes,
+          dataAtivacao,
+        }
+      } catch (error) {
+        console.error(`[admin/usuarios] Erro ao processar usuário ${user.id}:`, error)
+        // Retornar usuário básico mesmo se houver erro ao buscar assinatura/chave
+        return {
+          id: user.id,
+          slug: user.slug,
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar,
+          role: user.role,
+          userType: user.userType,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          assinatura: null,
+          chaveAtivacao: null,
+          diasRestantes: null,
+          dataAtivacao: null,
+        }
       }
     })
 
+    const totalUsuarios = usersWithDetails.length
     return NextResponse.json({ usuarios: usersWithDetails })
   } catch (error) {
     console.error("Erro ao buscar usuários:", error)
@@ -274,4 +319,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

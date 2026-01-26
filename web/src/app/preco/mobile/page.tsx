@@ -5,6 +5,9 @@ import { Check, MessageCircle } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useEffect, useState } from "react"
+import { CheckoutModal } from "@/components/checkout/checkout-modal"
+import { useAuth } from "@/hooks/use-auth"
+import { useSearchParams } from "next/navigation"
 
 interface Plan {
   id: string
@@ -25,8 +28,17 @@ const features = [
 ]
 
 export default function PrecoMobile() {
+  const { user, isLoading: authLoading } = useAuth()
+  const searchParams = useSearchParams()
   const [plans, setPlans] = useState<Plan[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
+  const [checkoutOpened, setCheckoutOpened] = useState(false)
+  
+  // Verificar se deve abrir checkout automaticamente
+  const planIdFromUrl = searchParams.get("planId")
+  const shouldOpenCheckout = searchParams.get("checkout") === "true"
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -45,6 +57,24 @@ export default function PrecoMobile() {
 
     fetchPlans()
   }, [])
+
+  // Efeito separado para abrir checkout quando usuário estiver logado
+  useEffect(() => {
+    // Aguardar autenticação carregar e planos estarem disponíveis
+    if (authLoading || isLoading || checkoutOpened) return
+    
+    // Se houver planId na URL e deve abrir checkout, abrir automaticamente
+    if (planIdFromUrl && shouldOpenCheckout && user) {
+      const plan = plans.find((p: Plan) => p.id === planIdFromUrl)
+      if (plan) {
+        setSelectedPlan(plan)
+        setIsCheckoutOpen(true)
+        setCheckoutOpened(true)
+        // Limpar URL params
+        window.history.replaceState({}, "", "/preco")
+      }
+    }
+  }, [planIdFromUrl, shouldOpenCheckout, user, authLoading, isLoading, plans, checkoutOpened])
 
   const formatPrice = (price: number) => {
     return (price / 100).toFixed(2).replace(".", ",")
@@ -140,17 +170,24 @@ export default function PrecoMobile() {
                       ))}
                     </ul>
 
-                    <Link href={`/checkout?planId=${plan.id}`} className="block">
-                      <Button
-                        className={`w-full ${
-                          isPopular
-                            ? "bg-[#409fff] hover:bg-[#3090f0] text-white"
-                            : "bg-white/10 hover:bg-white/20 text-white border border-white/20"
-                        }`}
-                      >
-                        Assinar Agora
-                      </Button>
-                    </Link>
+                    <Button
+                      onClick={() => {
+                        if (!user) {
+                          // Redirecionar para cadastro com o plano selecionado
+                          window.location.href = `/cadastro?planId=${plan.id}&redirect=checkout`
+                          return
+                        }
+                        setSelectedPlan(plan)
+                        setIsCheckoutOpen(true)
+                      }}
+                      className={`w-full ${
+                        isPopular
+                          ? "bg-[#409fff] hover:bg-[#3090f0] text-white"
+                          : "bg-white/10 hover:bg-white/20 text-white border border-white/20"
+                      }`}
+                    >
+                      Assinar Agora
+                    </Button>
                   </div>
                 )
               })}
@@ -190,6 +227,18 @@ export default function PrecoMobile() {
           </div>
         </div>
       </section>
+
+      {/* Checkout Modal */}
+      {selectedPlan && (
+        <CheckoutModal
+          plan={selectedPlan}
+          isOpen={isCheckoutOpen}
+          onClose={() => {
+            setIsCheckoutOpen(false)
+            setSelectedPlan(null)
+          }}
+        />
+      )}
     </main>
   )
 }

@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
+import { useHistorico } from "@/hooks/use-historico"
+import { useQueryClient } from "@tanstack/react-query"
+import { memoryCache } from "@/lib/memory-cache"
+import { navigateFast } from "@/lib/navigation"
 import {
   SidebarProvider,
   SidebarInset,
@@ -29,38 +33,26 @@ import { History, Music, Calendar, Clock, Play } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useRealtimeHistorico } from "@/hooks/use-realtime-historico"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
-interface HistoryEntry {
-  id: string
-  musicaId: string
-  codigo: string
-  dataExecucao: string
-  musica: {
-    id: string
-    titulo: string
-    artista: string
-    duracao: number | null
-  } | null
-}
-
-interface MostPlayed {
-  musicaId: string
-  codigo: string
-  vezesTocada: number
-  titulo: string
-  artista: string
-  duracao: number | null
-}
+import type { HistoryEntry, MostPlayed } from "@/hooks/use-historico"
 
 export default function HistoricoPage() {
   const router = useRouter()
   const params = useParams()
   const { user, isLoading: authLoading } = useAuth()
+  const queryClient = useQueryClient()
   const [slug, setSlug] = useState<string | null>(null)
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("all")
-  const [history, setHistory] = useState<HistoryEntry[]>([])
-  const [mostPlayed, setMostPlayed] = useState<MostPlayed[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  
+  // Usar React Query para buscar histórico com cache
+  const enabledCondition = !!user && !!slug
+  const {
+    data: historicoData,
+  } = useHistorico(timeFilter, {
+    enabled: enabledCondition,
+  })
+  
+  const history = historicoData?.historico || []
+  const mostPlayed = historicoData?.maisTocadas || []
 
   useEffect(() => {
     async function unwrapParams() {
@@ -77,7 +69,7 @@ export default function HistoricoPage() {
     // Aguardar um pouco para garantir que a sessão foi carregada
     const timeoutId = setTimeout(() => {
       if (!user) {
-        router.push("/login")
+        navigateFast(router, "/login")
         return
       }
 
@@ -86,15 +78,15 @@ export default function HistoricoPage() {
         // Usuários com role "user" não podem acessar histórico
         // Redirecionar para o perfil
         if (user.slug) {
-          router.push(`/${user.slug}/perfil`)
+          navigateFast(router, `/${user.slug}/perfil`)
         } else {
-          router.push("/login")
+          navigateFast(router, "/login")
         }
         return
       }
 
       if (slug && user.slug && user.slug !== slug) {
-        router.push(`/${user.slug}/historico`)
+        navigateFast(router, `/${user.slug}/historico`)
         return
       }
     }, 100)
@@ -102,49 +94,24 @@ export default function HistoricoPage() {
     return () => clearTimeout(timeoutId)
   }, [user, slug, authLoading, router])
 
-  const fetchHistory = useCallback(async () => {
-    if (!user) return
-
-    setIsLoading(true)
-    try {
-      const response = await fetch(`/api/historico?filter=${timeFilter}&limit=100`)
-      if (!response.ok) {
-        throw new Error("Erro ao buscar histórico")
-      }
-      const data = await response.json()
-      setHistory(data.historico || [])
-      setMostPlayed(data.maisTocadas || [])
-    } catch (error) {
-      console.error("Erro ao buscar histórico:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [user, timeFilter])
-
-  useEffect(() => {
-    if (user && slug) {
-      fetchHistory()
-    }
-  }, [user, slug, fetchHistory])
-
-  // Callbacks memoizados para Realtime
+  // Callbacks memoizados para Realtime - atualizar cache granularmente
   const handleInsert = useCallback(() => {
-    if (user && slug) {
-      fetchHistory()
-    }
-  }, [user, slug, fetchHistory])
+    // Invalidar React Query E cache em memória
+    queryClient.invalidateQueries({ queryKey: ["historico", timeFilter] })
+    memoryCache.invalidatePrefix("historico")
+  }, [queryClient, timeFilter])
 
   const handleUpdate = useCallback(() => {
-    if (user && slug) {
-      fetchHistory()
-    }
-  }, [user, slug, fetchHistory])
+    // Invalidar React Query E cache em memória
+    queryClient.invalidateQueries({ queryKey: ["historico", timeFilter] })
+    memoryCache.invalidatePrefix("historico")
+  }, [queryClient, timeFilter])
 
   const handleDelete = useCallback(() => {
-    if (user && slug) {
-      fetchHistory()
-    }
-  }, [user, slug, fetchHistory])
+    // Invalidar React Query E cache em memória
+    queryClient.invalidateQueries({ queryKey: ["historico", timeFilter] })
+    memoryCache.invalidatePrefix("historico")
+  }, [queryClient, timeFilter])
 
   // Realtime para histórico
   useRealtimeHistorico({
@@ -176,12 +143,10 @@ export default function HistoricoPage() {
     }, 0)
   }
 
-  if (authLoading || !user || !slug) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-xl">Carregando...</div>
-      </div>
-    )
+  // Não mostrar loading durante navegação - React Query tem cache
+  // Só renderizar se temos user e slug, caso contrário deixar useEffect redirecionar silenciosamente
+  if (!user || !slug) {
+    return null // Redirecionamento silencioso sem loading
   }
 
   return (
@@ -287,24 +252,19 @@ export default function HistoricoPage() {
                 </TabsList>
                 
                 <TabsContent value="historico" className="mt-4">
-                  {isLoading ? (
-                    <div className="text-center py-8">
-                      <div className="text-muted-foreground">Carregando...</div>
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">#</TableHead>
-                          <TableHead>Música</TableHead>
-                          <TableHead>Artista</TableHead>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Data/Hora</TableHead>
-                          <TableHead>Duração</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {history.length === 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">#</TableHead>
+                        <TableHead>Música</TableHead>
+                        <TableHead>Artista</TableHead>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Data/Hora</TableHead>
+                        <TableHead>Duração</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {history.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={6} className="text-center py-8">
                               <div className="flex flex-col items-center gap-2">
@@ -353,7 +313,6 @@ export default function HistoricoPage() {
                         )}
                       </TableBody>
                     </Table>
-                  )}
                 </TabsContent>
                 
                 <TabsContent value="mais-tocadas" className="mt-4">

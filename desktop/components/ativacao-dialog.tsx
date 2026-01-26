@@ -61,8 +61,8 @@ export function AtivacaoDialog({
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }))
-        setError(errorData.error || "Chave de ativação inválida")
+        const errorData = await response.json().catch(() => ({ error: "Ocorreu um erro inesperado. Por favor, tente novamente." }))
+        setError(errorData.error || "Não foi possível validar a chave. Tente novamente.")
         return
       }
 
@@ -81,10 +81,10 @@ export function AtivacaoDialog({
           setDiasRestantes(null)
         }, 2000)
       } else {
-        setError(resultado.error || "Chave de ativação inválida")
+        setError(resultado.error || "Chave de ativação inválida. Verifique se digitou corretamente.")
       }
     } catch (err: any) {
-      setError(err.message || "Erro ao validar chave. Verifique sua conexão.")
+      setError("Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente.")
     } finally {
       setIsLoading(false)
     }

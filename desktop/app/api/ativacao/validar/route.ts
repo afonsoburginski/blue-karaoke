@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     if (!chave) {
       return NextResponse.json(
-        { error: "Chave de ativação é obrigatória" },
+        { error: "Por favor, informe uma chave de ativação." },
         { status: 400 }
       )
     }
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     
     if (!resultado.valida) {
       return NextResponse.json(
-        { error: resultado.error || "Chave inválida" },
+        { error: resultado.error || "Chave de ativação inválida. Verifique se digitou corretamente." },
         { status: 400 }
       )
     }
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Erro ao validar chave:", error)
     return NextResponse.json(
-      { error: error.message || "Erro ao validar chave" },
+      { error: "Ocorreu um erro ao validar a chave. Por favor, tente novamente mais tarde." },
       { status: 500 }
     )
   }

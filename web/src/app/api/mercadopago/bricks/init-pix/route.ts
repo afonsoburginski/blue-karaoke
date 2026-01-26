@@ -7,9 +7,9 @@ const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || ""
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { amount, preferenceId, userId, userEmail } = body
+    const { amount, userId, userEmail, planId, period } = body
 
-    if (!amount || !preferenceId || !userId || !userEmail) {
+    if (!amount || !userId || !userEmail) {
       return NextResponse.json(
         { error: "Dados incompletos" },
         { status: 400 }

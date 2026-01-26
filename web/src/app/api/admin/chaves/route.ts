@@ -134,6 +134,57 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Se já existe chave para este usuário, atualizar ao invés de criar nova
+    if (userId) {
+      const [existingKey] = await db
+        .select()
+        .from(chavesAtivacao)
+        .where(
+          and(
+            eq(chavesAtivacao.userId, userId),
+            eq(chavesAtivacao.tipo, tipo)
+          )
+        )
+        .limit(1)
+
+      if (existingKey) {
+        // Atualizar chave existente ao invés de criar nova
+        const updateData: any = {
+          status: "ativa",
+          updatedAt: new Date(),
+        }
+        
+        if (tipo === "assinatura" && dataExpiracao) {
+          updateData.dataExpiracao = new Date(dataExpiracao)
+        }
+        
+        if (tipo === "maquina" && limiteTempo) {
+          updateData.limiteTempo = parseInt(limiteTempo.toString())
+        }
+        
+        const [updatedChave] = await db
+          .update(chavesAtivacao)
+          .set(updateData)
+          .where(eq(chavesAtivacao.id, existingKey.id))
+          .returning()
+
+        return NextResponse.json(
+          {
+            chave: {
+              id: updatedChave.id,
+              chave: updatedChave.chave,
+              tipo: updatedChave.tipo,
+              status: updatedChave.status,
+              limiteTempo: updatedChave.limiteTempo,
+              dataExpiracao: updatedChave.dataExpiracao,
+            },
+            message: "Chave atualizada com sucesso",
+          },
+          { status: 200 }
+        )
+      }
+    }
+
     // Gerar chave única
     let chave = gerarChaveAtivacao()
     let tentativas = 0
