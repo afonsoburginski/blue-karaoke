@@ -4,7 +4,7 @@ import { Header } from "@/components/header/mobile"
 import { Check, MessageCircle } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { CheckoutModal } from "@/components/checkout/checkout-modal"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
@@ -27,7 +27,7 @@ const features = [
   "Multiplataforma",
 ]
 
-export default function PrecoMobile() {
+function PrecoMobileContent() {
   const { user, isLoading: authLoading } = useAuth()
   const searchParams = useSearchParams()
   const [plans, setPlans] = useState<Plan[]>([])
@@ -240,6 +240,21 @@ export default function PrecoMobile() {
         />
       )}
     </main>
+  )
+}
+
+export default function PrecoMobilePage() {
+  return (
+    <Suspense fallback={
+      <main className="relative min-h-screen w-full bg-gradient-to-b from-black via-gray-900 to-black">
+        <Header />
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <p className="text-gray-400 text-sm">Carregando planos...</p>
+        </div>
+      </main>
+    }>
+      <PrecoMobileContent />
+    </Suspense>
   )
 }
 

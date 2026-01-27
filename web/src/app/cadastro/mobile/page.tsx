@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { navigateFast } from "@/lib/navigation"
@@ -12,7 +12,7 @@ import { Header } from "@/components/header/mobile"
 import { authClient } from "@/lib/auth-client"
 import { createSlug } from "@/lib/slug"
 
-export default function CadastroMobile() {
+function CadastroMobileContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const planId = searchParams.get("planId")
@@ -321,6 +321,46 @@ export default function CadastroMobile() {
         </Card>
       </div>
     </main>
+  )
+}
+
+function CadastroMobileFallback() {
+  return (
+    <main className="relative min-h-screen w-full overflow-hidden">
+      <div
+        className="absolute inset-0 bg-cover bg-no-repeat"
+        style={{
+          backgroundImage: `url('/images/karaoke-bg.jpg')`,
+          backgroundPosition: "center center",
+        }}
+      />
+      <Header />
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 pt-20 pb-6">
+        <Card className="w-full max-w-sm animate-pulse">
+          <CardHeader className="space-y-1 px-4 pt-6">
+            <div className="h-6 w-40 rounded bg-muted" />
+            <div className="h-3 w-56 rounded bg-muted" />
+          </CardHeader>
+          <CardContent className="space-y-4 px-4">
+            <div className="h-10 rounded bg-muted" />
+            <div className="h-10 rounded bg-muted" />
+            <div className="h-10 rounded bg-muted" />
+            <div className="h-10 rounded bg-muted" />
+          </CardContent>
+          <CardFooter className="px-4 pb-6">
+            <div className="h-10 w-full rounded bg-muted" />
+          </CardFooter>
+        </Card>
+      </div>
+    </main>
+  )
+}
+
+export default function CadastroMobilePage() {
+  return (
+    <Suspense fallback={<CadastroMobileFallback />}>
+      <CadastroMobileContent />
+    </Suspense>
   )
 }
 

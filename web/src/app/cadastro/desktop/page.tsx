@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { navigateFast } from "@/lib/navigation"
@@ -12,7 +12,7 @@ import { Header } from "@/components/header/desktop"
 import { authClient } from "@/lib/auth-client"
 import { createSlug } from "@/lib/slug"
 
-export default function CadastroDesktop() {
+function CadastroDesktopContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const planId = searchParams.get("planId")
@@ -317,6 +317,46 @@ export default function CadastroDesktop() {
         </Card>
       </div>
     </main>
+  )
+}
+
+function CadastroDesktopFallback() {
+  return (
+    <main className="relative min-h-screen w-full overflow-hidden">
+      <div
+        className="absolute inset-0 bg-cover bg-no-repeat"
+        style={{
+          backgroundImage: `url('/images/karaoke-bg.jpg')`,
+          backgroundPosition: "center center",
+        }}
+      />
+      <Header />
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-6 pt-20 md:px-12 lg:px-20">
+        <Card className="w-full max-w-md animate-pulse">
+          <CardHeader className="space-y-1">
+            <div className="h-8 w-48 rounded bg-muted" />
+            <div className="h-4 w-64 rounded bg-muted" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="h-10 rounded bg-muted" />
+            <div className="h-10 rounded bg-muted" />
+            <div className="h-10 rounded bg-muted" />
+            <div className="h-10 rounded bg-muted" />
+          </CardContent>
+          <CardFooter>
+            <div className="h-10 w-full rounded bg-muted" />
+          </CardFooter>
+        </Card>
+      </div>
+    </main>
+  )
+}
+
+export default function CadastroDesktopPage() {
+  return (
+    <Suspense fallback={<CadastroDesktopFallback />}>
+      <CadastroDesktopContent />
+    </Suspense>
   )
 }
 
