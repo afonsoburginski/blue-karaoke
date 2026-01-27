@@ -1,7 +1,6 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ReactNode, useState } from 'react'
 
 // Padrão oficial do React Query v5 para Next.js App Router
@@ -51,12 +50,7 @@ export function ReactQueryProvider({ children }: { children: ReactNode }) {
   // e não seja recriado em re-renders do componente pai
   const [queryClient] = useState(() => getQueryClient())
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-      <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
-    </QueryClientProvider>
-  )
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }
 
 

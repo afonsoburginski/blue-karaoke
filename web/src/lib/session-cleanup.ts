@@ -5,7 +5,7 @@
 
 import { db } from "./db"
 import { session } from "./db/schema"
-import { sql, and, lt } from "drizzle-orm"
+import { sql, and, lt, desc, eq, gt } from "drizzle-orm"
 
 /**
  * Remove todas as sessões expiradas do banco de dados
@@ -42,10 +42,6 @@ export async function cleanupUserOldSessions(
   keepCount: number = 5
 ): Promise<number> {
   try {
-    const { desc, eq, and, gt } = await import("drizzle-orm")
-    
-    const { desc, eq, and, gt } = await import("drizzle-orm")
-    
     // Buscar todas as sessões ativas do usuário ordenadas por data de criação (mais recente primeiro)
     const activeSessions = await db
       .select()
@@ -97,13 +93,11 @@ export async function performFullCleanup(
     const expiredSessionsRemoved = await cleanupExpiredSessions()
     
     // 2. Para cada usuário, limitar número de sessões ativas
-    const { gt: gtOperator } = await import("drizzle-orm")
-    
     // Buscar todos os usuários que têm sessões ativas
     const usersWithSessions = await db
       .selectDistinct({ userId: session.userId })
       .from(session)
-      .where(gtOperator(session.expiresAt, new Date()))
+      .where(gt(session.expiresAt, new Date()))
     
     let oldSessionsRemoved = 0
     let usersAffected = 0
