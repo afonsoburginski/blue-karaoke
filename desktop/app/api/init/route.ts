@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { initLocalDb } from "@/lib/db/init-local"
 
+export const runtime = "nodejs"
+
 /**
  * API route para inicializar o banco de dados local
  * GET /api/init - Inicializa o banco local se não existir

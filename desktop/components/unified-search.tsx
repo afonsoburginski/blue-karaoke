@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { Input } from "@/components/ui/input"
 import { Search, Music, Loader2, Hash } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -30,8 +31,16 @@ export function UnifiedSearch() {
   const [isLoading, setIsLoading] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [isCode, setIsCode] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
+
+  // Ao abrir resultados ou mudar lista, selecionar o primeiro
+  useEffect(() => {
+    if (showResults && resultados.length > 0) {
+      setSelectedIndex(0)
+    }
+  }, [showResults, resultados.length])
 
   // Detectar se é código (5 dígitos numéricos)
   useEffect(() => {
@@ -100,9 +109,10 @@ export function UnifiedSearch() {
       return
     }
 
-    // Se tiver apenas um resultado, selecionar automaticamente
-    if (resultados.length === 1) {
-      handleSelectMusica(resultados[0].codigo)
+    // Se houver resultados, Enter inicia o selecionado (ou o primeiro)
+    if (resultados.length > 0) {
+      const idx = Math.min(selectedIndex, resultados.length - 1)
+      handleSelectMusica(resultados[idx].codigo)
     }
   }
 
@@ -112,65 +122,104 @@ export function UnifiedSearch() {
     router.push(`/tocar/${codigo}`)
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  /** Só seleciona o índice (mostra dados na barra); Enter depois inicia */
+  const handleSelectIndex = (index: number) => {
+    setSelectedIndex(index)
+  }
+
+  const selectedMusica = resultados.length > 0 ? resultados[Math.min(selectedIndex, resultados.length - 1)] : null
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       handleSubmit()
+      return
+    }
+    if (!showResults || resultados.length === 0) return
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setSelectedIndex((i) => Math.min(i + 1, resultados.length - 1))
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setSelectedIndex((i) => Math.max(i - 1, 0))
     }
   }
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto">
+    <div className="relative w-full max-w-2xl">
       <form onSubmit={handleSubmit}>
         <div className="relative">
           {isCode ? (
-            <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-cyan-400" />
+            <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-cyan-600" />
           ) : (
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-stone-600" />
           )}
           <Input
             type="text"
-            placeholder={isCode ? "Código: Pressione Enter para buscar" : "Buscar por código, nome ou artista..."}
+            placeholder={isCode ? "Código: Pressione Enter para buscar" : "Buscar nas músicas baixadas (código, nome ou artista)..."}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             onFocus={() => {
               if (resultados.length > 0 && !isCode) {
                 setShowResults(true)
               }
             }}
             onBlur={() => {
-              // Delay para permitir clique nos resultados
               setTimeout(() => setShowResults(false), 200)
             }}
-            className={`pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:bg-white/15 focus-visible:border-cyan-400 focus-visible:ring-cyan-400/50 ${
-              isCode ? "border-cyan-400/50" : ""
-            }`}
+            style={{ backgroundColor: "#fff" }}
+            className={`pl-10 pr-10 h-12 text-base rounded-xl !bg-white text-stone-900 placeholder:text-stone-600 border-2 border-stone-400 shadow-md focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:outline-none ${isCode ? "border-cyan-500 ring-2 ring-cyan-500/30" : ""}`}
           />
           {isLoading && !isCode && (
-            <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40 animate-spin" />
+            <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 animate-spin text-stone-600" />
           )}
         </div>
       </form>
 
-      {/* Resultados da busca (apenas para busca por texto) */}
+      {/* Dados do item selecionado: portal para o CENTRO da barra (#search-selected-center) */}
+      {typeof document !== "undefined" &&
+        !isCode &&
+        (() => {
+          const el = document.getElementById("search-selected-center")
+          if (!el) return null
+          return createPortal(
+            selectedMusica ? (
+              <div className="w-full max-w-md text-stone-900 text-left text-base">
+                <p className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Pressione Enter para iniciar</p>
+                <div className="space-y-2 text-base">
+                  <p><span className="font-medium text-stone-500">Título:</span> <span className="font-semibold text-stone-900 truncate block">{selectedMusica.titulo}</span></p>
+                  <p><span className="font-medium text-stone-500">Artista:</span> <span className="text-stone-800 truncate block">{selectedMusica.artista}</span></p>
+                  <p><span className="font-medium text-stone-500">Código:</span> <span className="font-mono font-bold text-cyan-700">{selectedMusica.codigo}</span></p>
+                </div>
+              </div>
+            ) : null,
+            el
+          )
+        })()}
+
+      {/* Menu de opções: abre para cima para não sair da tela (input na barra inferior) */}
       {showResults && !isCode && resultados.length > 0 && (
-        <div className="absolute z-50 w-full mt-2 bg-black/95 backdrop-blur-sm border border-white/20 rounded-lg shadow-2xl max-h-96 overflow-y-auto">
-          {resultados.map((musica) => (
+        <div className="absolute z-50 left-0 right-0 bottom-full mb-2 rounded-xl bg-white border-2 border-stone-300 shadow-lg max-h-64 overflow-y-auto">
+          {resultados.map((musica, index) => (
             <button
               key={musica.codigo}
               type="button"
-              onClick={() => handleSelectMusica(musica.codigo)}
-              className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors border-b border-white/10 last:border-0"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleSelectIndex(index)
+              }}
+              className={`w-full text-left px-4 py-2.5 transition-colors border-b border-stone-200 last:border-0 ${
+                index === selectedIndex ? "bg-cyan-50 border-l-4 border-l-cyan-500" : "hover:bg-stone-50"
+              }`}
             >
               <div className="flex items-center gap-3">
-                <Music className="h-5 w-5 text-cyan-400 flex-shrink-0" />
+                <Music className={`flex-shrink-0 h-5 w-5 ${index === selectedIndex ? "text-cyan-600" : "text-stone-500"}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-medium truncate">{musica.titulo}</p>
-                  <p className="text-white/60 text-sm truncate">{musica.artista}</p>
+                  <p className="font-medium text-base text-stone-900 truncate">{musica.titulo}</p>
+                  <p className="text-sm text-stone-600 truncate">{musica.artista}</p>
                 </div>
-                <span className="text-cyan-400 font-mono text-sm flex-shrink-0">
-                  {musica.codigo}
-                </span>
+                <span className="font-mono text-sm font-bold text-cyan-700 flex-shrink-0">{musica.codigo}</span>
               </div>
             </button>
           ))}
@@ -178,8 +227,8 @@ export function UnifiedSearch() {
       )}
 
       {showResults && !isCode && query.trim().length >= 2 && resultados.length === 0 && !isLoading && (
-        <div className="absolute z-50 w-full mt-2 bg-black/95 backdrop-blur-sm border border-white/20 rounded-lg shadow-2xl p-4">
-          <p className="text-white/60 text-center">Nenhuma música encontrada</p>
+        <div className="absolute z-50 left-0 right-0 bottom-full mb-2 rounded-lg shadow-xl p-4 bg-white border-2 border-stone-200 text-stone-700 text-base">
+          <p className="text-stone-600 text-center text-base">Nenhuma música encontrada</p>
         </div>
       )}
     </div>

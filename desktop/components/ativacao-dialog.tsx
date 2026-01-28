@@ -71,11 +71,24 @@ export function AtivacaoDialog({
       if (resultado.valida && resultado.chave) {
         setSuccess(true)
         setDiasRestantes(resultado.chave.diasRestantes)
-        
-        // Chamar callback de sucesso após um breve delay
-        setTimeout(() => {
-          onAtivacaoSucesso?.()
-          onOpenChange(false)
+
+        // Salvar no SQLite local (cópia do schema Supabase para uso offline)
+        try {
+          await fetch("/api/ativacao/salvar-local", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ valida: resultado.valida, chave: resultado.chave }),
+          })
+        } catch {
+          // Não bloqueia: validação já foi no Supabase; local é cache
+        }
+
+        // Callback verifica status e fecha o diálogo no parent; evitamos reabertura
+        setTimeout(async () => {
+          const result = onAtivacaoSucesso?.()
+          if (result && typeof (result as Promise<unknown>).then === "function") {
+            await (result as Promise<unknown>)
+          }
           setChave("")
           setSuccess(false)
           setDiasRestantes(null)

@@ -2,6 +2,11 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, useRef } from "react"
+import Image from "next/image"
+import { toast } from "sonner"
+import { useFilaProxima } from "@/contexts/fila-proxima"
+import { ConfiguracoesDialog } from "@/components/configuracoes-dialog"
+import { Settings } from "lucide-react"
 
 interface Musica {
   codigo: string
@@ -14,12 +19,31 @@ const HOLD_DURATION = 800 // 0.8 segundos para acionar (resposta rápida)
 
 export default function VideoPlayer({ musica }: { musica: Musica }) {
   const router = useRouter()
+  const { fila, addToFila, removeFromFila } = useFilaProxima()
   const [holdProgress, setHoldProgress] = useState(0)
   const [isHolding, setIsHolding] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
+  const [digitBuffer, setDigitBuffer] = useState("")
+  const [openAtLogin, setOpenAtLoginState] = useState(false)
+  const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const holdStartRef = useRef<number | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const hasFinishedRef = useRef(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isElectron, setIsElectron] = useState(false)
+
+  // Electron: detectar ambiente e carregar "Iniciar com Windows"
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    setIsElectron(!!(window as { electron?: { quit?: () => void } }).electron?.quit)
+    if (!window.electron?.getOpenAtLogin) return
+    window.electron.getOpenAtLogin().then(({ openAtLogin }) => setOpenAtLoginState(openAtLogin))
+  }, [])
+  const setOpenAtLogin = useCallback(async (value: boolean) => {
+    if (typeof window === "undefined" || !window.electron?.setOpenAtLogin) return
+    await window.electron.setOpenAtLogin!(value)
+    setOpenAtLoginState(value)
+  }, [])
 
   const handleVideoEnd = useCallback(async () => {
     if (hasFinishedRef.current) return
@@ -47,9 +71,15 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
     // Esperar a animação de fade out
     await new Promise(resolve => setTimeout(resolve, 800))
     
-    // Redirecionar para a página de nota
-    router.push(`/nota?nota=${nota}`)
-  }, [musica.codigo, router])
+    // Se há próxima na fila, tocar; senão ir para nota
+    const proximoCodigo = fila[0]
+    if (proximoCodigo) {
+      removeFromFila()
+      router.push(`/tocar/${proximoCodigo}`)
+    } else {
+      router.push(`/nota?nota=${nota}`)
+    }
+  }, [musica.codigo, router, fila, removeFromFila])
 
   // Atualizar progresso do hold
   const updateHoldProgress = useCallback(() => {
@@ -89,11 +119,91 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
     }
   }, [isExiting])
 
-  // Listener de teclado
+  // Ao completar 5 dígitos durante a reprodução: validar e adicionar à fila
+  useEffect(() => {
+    if (digitBuffer.length !== 5) return
+    const codigo = digitBuffer
+    let cancelled = false
+    fetch(`/api/musica/${codigo}`)
+      .then((r) => r.json())
+      .then((data: { exists?: boolean }) => {
+        if (cancelled) return
+        if (data.exists) {
+          addToFila(codigo)
+          toast.success("Adicionado à fila")
+        } else {
+          toast.error("Código não encontrado")
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Erro ao verificar código")
+      })
+      .finally(() => {
+        if (!cancelled) setDigitBuffer("")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [digitBuffer, addToFila])
+
+  // Listener de teclado: F12, Delete, +, C, P, Enter, Backspace, 0-9
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F12") {
+        e.preventDefault()
+        setConfigDialogOpen(true)
+        return
+      }
+      if (e.key === "Delete") {
+        e.preventDefault()
+        router.push("/")
+        return
+      }
+      // + = reiniciar música atual (só <video>; YouTube não dá para controlar)
+      if (e.key === "+") {
+        e.preventDefault()
+        const video = videoRef.current
+        if (video) {
+          video.currentTime = 0
+          video.play().catch(() => {})
+        } else {
+          router.push("/")
+        }
+        return
+      }
+      // C = tocar música aleatória
+      if (e.key === "c" || e.key === "C") {
+        e.preventDefault()
+        fetch("/api/musicas/aleatoria")
+          .then((r) => r.json())
+          .then((data: { codigo: string | null }) => {
+            if (data.codigo) router.push(`/tocar/${data.codigo}`)
+          })
+          .catch(() => {})
+        return
+      }
+      // P = pausar/retomar (só <video>)
+      if (e.key === "p" || e.key === "P") {
+        e.preventDefault()
+        const video = videoRef.current
+        if (video) {
+          if (video.paused) video.play().catch(() => {})
+          else video.pause()
+        }
+        return
+      }
       if (e.key === "Enter" && !e.repeat) {
         startHold()
+        return
+      }
+      if (!isExiting && e.key === "Backspace" && !e.repeat) {
+        e.preventDefault()
+        setDigitBuffer((prev) => prev.slice(0, -1))
+        return
+      }
+      if (!isExiting && e.key >= "0" && e.key <= "9" && !e.repeat) {
+        e.preventDefault()
+        setDigitBuffer((prev) => (prev + e.key).slice(0, 5))
       }
     }
 
@@ -113,7 +223,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [startHold, cancelHold])
+  }, [startHold, cancelHold, router, isExiting])
 
   const isYouTube = musica.arquivo.includes("youtube.com") || musica.arquivo.includes("youtu.be")
   const isRemoteUrl = musica.arquivo.startsWith("http://") || musica.arquivo.startsWith("https://")
@@ -129,6 +239,102 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
         isExiting ? 'opacity-0 scale-105' : 'opacity-100 scale-100'
       }`}
     >
+      {/* Logo no canto superior esquerdo */}
+      <div className="absolute top-8 left-8 z-20">
+        <div className="relative w-24 h-24 md:w-28 md:h-28">
+          <Image
+            src="/logo-white.png"
+            alt="Blue Karaokê"
+            fill
+            className="object-contain drop-shadow-[0_0_20px_rgba(0,0,0,0.8)]"
+            priority
+          />
+        </div>
+      </div>
+
+      {/* Barra de tarefas: atalhos em texto clicável */}
+      <div className="absolute left-0 right-0 z-20 top-36 md:top-40 bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 flex flex-wrap items-center gap-4">
+        <button
+          type="button"
+          onClick={() => setConfigDialogOpen(true)}
+          className="inline-flex items-center gap-2 text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          title="Configurações (F12)"
+        >
+          <Settings className="h-4 w-4 opacity-70" aria-hidden />
+          Configurações (F12)
+        </button>
+        <span className="text-stone-400 select-none">·</span>
+        {isElectron && (
+          <>
+            <button
+              type="button"
+              onClick={() => (window as { electron?: { quit?: () => void } }).electron?.quit?.()}
+              className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+              title="Fechar Programa (ESC)"
+            >
+              Fechar Programa (ESC)
+            </button>
+            <span className="text-stone-400 select-none">·</span>
+            <button
+              type="button"
+              onClick={() => (window as { electron?: { minimize?: () => void } }).electron?.minimize?.()}
+              className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+              title="Minimizar Programa (Espaço)"
+            >
+              Minimizar Programa (Espaço)
+            </button>
+            <span className="text-stone-400 select-none">·</span>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            fetch("/api/musicas/aleatoria")
+              .then((r) => r.json())
+              .then((data: { codigo: string | null }) => {
+                if (data.codigo) router.push(`/tocar/${data.codigo}`)
+              })
+              .catch(() => {})
+          }}
+          className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          title="Tocar música aleatória (C)"
+        >
+          Tocar música aleatória (C)
+        </button>
+        <span className="text-stone-400 select-none">·</span>
+        <button
+          type="button"
+          onClick={() => {
+            const video = videoRef.current
+            if (video) {
+              if (video.paused) video.play().catch(() => {})
+              else video.pause()
+            }
+          }}
+          className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          title="Pausar música (P)"
+        >
+          Pausar música (P)
+        </button>
+        <span className="text-stone-400 select-none">·</span>
+        <button
+          type="button"
+          onClick={() => {
+            const video = videoRef.current
+            if (video) {
+              video.currentTime = 0
+              video.play().catch(() => {})
+            } else {
+              router.push("/")
+            }
+          }}
+          className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          title="Reiniciar música (+)"
+        >
+          Reiniciar música (+)
+        </button>
+      </div>
+
       {/* Video player */}
       {isYouTube ? (
         <iframe
@@ -140,6 +346,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
         />
       ) : (
         <video
+          ref={videoRef}
           className="w-full h-screen object-cover"
           src={videoSrc}
           autoPlay
@@ -224,6 +431,13 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
           </div>
         </div>
       )}
+
+      <ConfiguracoesDialog
+        open={configDialogOpen}
+        onOpenChange={setConfigDialogOpen}
+        openAtLogin={openAtLogin}
+        setOpenAtLogin={setOpenAtLogin}
+      />
     </div>
   )
 }

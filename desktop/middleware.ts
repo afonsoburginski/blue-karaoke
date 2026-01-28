@@ -2,24 +2,10 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 /**
- * Middleware para garantir que o banco local está inicializado
- * em todas as requisições da API
+ * Middleware – não usa SQLite (Edge não suporta fs/better-sqlite3).
+ * O banco local é inicializado sob demanda nas rotas de API que rodam em Node.
  */
-export async function middleware(request: NextRequest) {
-  // Apenas para rotas da API
-  if (request.nextUrl.pathname.startsWith("/api")) {
-    try {
-      // Inicializar banco local de forma assíncrona (não bloqueia)
-      const { ensureLocalDbInitialized } = await import("./lib/db/auto-init")
-      ensureLocalDbInitialized().catch((error) => {
-        console.error("Erro ao inicializar banco local no middleware:", error)
-      })
-    } catch (error) {
-      // Ignorar erros no middleware para não bloquear requisições
-      console.error("Erro no middleware:", error)
-    }
-  }
-
+export async function middleware(_request: NextRequest) {
   return NextResponse.next()
 }
 

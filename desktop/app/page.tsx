@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from 'next/navigation'
 import Image from "next/image"
 import { Spotlight } from "@/components/ui/spotlight-new"
@@ -10,7 +10,8 @@ import { AtivacaoDialog } from "@/components/ativacao-dialog"
 import { UnifiedSearch } from "@/components/unified-search"
 import { useAtivacao } from "@/hooks/use-ativacao"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calendar, Clock, AlertCircle } from "lucide-react"
+import { ConfiguracoesDialog } from "@/components/configuracoes-dialog"
+import { Calendar, Clock, AlertCircle, Ban, Download, Settings } from "lucide-react"
 
 export default function HomePage() {
   const [codigo, setCodigo] = useState("")
@@ -18,13 +19,31 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [ativacaoDialogOpen, setAtivacaoDialogOpen] = useState(false)
+  const [configDialogOpen, setConfigDialogOpen] = useState(false)
+  const [openAtLogin, setOpenAtLoginState] = useState(false)
+  const [isElectron, setIsElectron] = useState(false)
+  const [blockDownloads, setBlockDownloads] = useState(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem("blue-karaoke-download-blocked") === "1"
+  })
   const router = useRouter()
   const { status: ativacaoStatus, verificar: verificarAtivacao } = useAtivacao()
-  
+  const acabouDeAtivarRef = useRef(false)
+
   // Verifica se está ativado para permitir downloads
   const isActivated = ativacaoStatus.ativada && !ativacaoStatus.expirada
+
+  const toggleBlockDownloads = useCallback(() => {
+    setBlockDownloads((prev) => {
+      const next = !prev
+      if (typeof window !== "undefined") {
+        localStorage.setItem("blue-karaoke-download-blocked", next ? "1" : "0")
+      }
+      return next
+    })
+  }, [])
   
-  // Sincronização para download offline (só funciona se ativado)
+  // Sincronização para download offline (respeita "impedir download")
   const { 
     downloadMetadata, 
     downloadAllForOffline, 
@@ -32,7 +51,7 @@ export default function HomePage() {
     isDownloading, 
     isOnline,
     message: syncMessage 
-  } = useAutoSync({ intervalMinutes: 30, isActivated })
+  } = useAutoSync({ intervalMinutes: 30, isActivated, blockDownloads })
 
   // Listener para atalho de sincronização (tecla *)
   useEffect(() => {
@@ -54,20 +73,23 @@ export default function HomePage() {
     }
   }, [downloadMetadata, downloadAllForOffline])
 
-  // Verificar ativação ao carregar
+  // Verificar ativação ao carregar — não reabrir logo após ativação bem-sucedida
   useEffect(() => {
-    if (ativacaoStatus.modo === "loading") {
-      return
-    }
+    if (ativacaoStatus.modo === "loading") return
+    if (acabouDeAtivarRef.current) return
 
-    // Se não estiver ativado ou estiver expirado, mostrar diálogo
     if (!ativacaoStatus.ativada || ativacaoStatus.expirada) {
       setAtivacaoDialogOpen(true)
     }
   }, [ativacaoStatus])
 
-  const handleAtivacaoSucesso = useCallback(() => {
-    verificarAtivacao()
+  const handleAtivacaoSucesso = useCallback(async () => {
+    acabouDeAtivarRef.current = true
+    await verificarAtivacao()
+    setAtivacaoDialogOpen(false)
+    setTimeout(() => {
+      acabouDeAtivarRef.current = false
+    }, 3000)
   }, [verificarAtivacao])
 
   const handleSubmit = useCallback(async () => {
@@ -121,8 +143,15 @@ export default function HomePage() {
         target.closest("textarea") ||
         target.closest("[contenteditable]")
       
+      // F12 = abrir Configurações (padrão do app)
+      if (e.key === "F12") {
+        e.preventDefault()
+        setConfigDialogOpen(true)
+        return
+      }
+
       // Não bloquear se algum diálogo estiver aberto
-      if (ativacaoDialogOpen || uploadDialogOpen || isInputElement) {
+      if (ativacaoDialogOpen || uploadDialogOpen || configDialogOpen || isInputElement) {
         return // Permitir entrada normal em inputs e diálogos
       }
 
@@ -149,9 +178,15 @@ export default function HomePage() {
         handleSubmit()
         e.preventDefault()
       } 
-      // Backspace to delete
+      // Backspace = limpar um dígito
       else if (e.key === "Backspace") {
         setCodigo((prev) => prev.slice(0, -1))
+        setError(false)
+        e.preventDefault()
+      }
+      // Delete = cancelar (limpar todo o código)
+      else if (e.key === "Delete") {
+        setCodigo("")
         setError(false)
         e.preventDefault()
       }
@@ -160,14 +195,24 @@ export default function HomePage() {
         window.dispatchEvent(new CustomEvent("checkNewMusic"))
         e.preventDefault()
       }
+      // + = reiniciar (voltar à tela inicial)
       else if (e.key === "+") {
-        // Baixar tudo para offline (metadados + arquivos)
-        window.dispatchEvent(new CustomEvent("downloadAllOffline"))
+        router.push("/")
         e.preventDefault()
       }
       else if (e.key === "/") {
         setUploadDialogOpen(true)
         e.preventDefault()
+      }
+      // C = tocar música aleatória
+      else if (e.key === "c" || e.key === "C") {
+        e.preventDefault()
+        fetch("/api/musicas/aleatoria")
+          .then((r) => r.json())
+          .then((data: { codigo: string | null }) => {
+            if (data.codigo) router.push(`/tocar/${data.codigo}`)
+          })
+          .catch(() => {})
       }
       else {
         e.preventDefault()
@@ -176,7 +221,20 @@ export default function HomePage() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [codigo, error, isLoading, handleSubmit, ativacaoStatus, ativacaoDialogOpen, uploadDialogOpen])
+  }, [codigo, error, isLoading, handleSubmit, ativacaoStatus, ativacaoDialogOpen, uploadDialogOpen, configDialogOpen, router])
+
+  // Electron: detectar ambiente e carregar "Iniciar com Windows"
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    setIsElectron(!!window.electron?.quit)
+    if (!window.electron?.getOpenAtLogin) return
+    window.electron.getOpenAtLogin().then(({ openAtLogin }) => setOpenAtLoginState(openAtLogin))
+  }, [])
+  const setOpenAtLogin = useCallback(async (value: boolean) => {
+    if (typeof window === "undefined" || !window.electron?.setOpenAtLogin) return
+    await window.electron.setOpenAtLogin!(value)
+    setOpenAtLoginState(value)
+  }, [])
 
   // Loading state
   if (ativacaoStatus.modo === "loading") {
@@ -237,6 +295,57 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Barra de tarefas: atalhos em texto clicável */}
+      <div className="absolute left-0 right-0 z-20 top-40 md:top-44 bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 flex flex-wrap items-center gap-4">
+        <button
+          type="button"
+          onClick={() => setConfigDialogOpen(true)}
+          className="inline-flex items-center gap-2 text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          title="Configurações (F12)"
+        >
+          <Settings className="h-4 w-4 opacity-70" aria-hidden />
+          Configurações (F12)
+        </button>
+        <span className="text-stone-400 select-none">·</span>
+        {isElectron && (
+          <>
+            <button
+              type="button"
+              onClick={() => window.electron?.quit?.()}
+              className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+              title="Fechar Programa (ESC)"
+            >
+              Fechar Programa (ESC)
+            </button>
+            <span className="text-stone-400 select-none">·</span>
+            <button
+              type="button"
+              onClick={() => window.electron?.minimize?.()}
+              className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+              title="Minimizar Programa (Espaço)"
+            >
+              Minimizar Programa (Espaço)
+            </button>
+            <span className="text-stone-400 select-none">·</span>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            fetch("/api/musicas/aleatoria")
+              .then((r) => r.json())
+              .then((data: { codigo: string | null }) => {
+                if (data.codigo) router.push(`/tocar/${data.codigo}`)
+              })
+              .catch(() => {})
+          }}
+          className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          title="Tocar música aleatória (C)"
+        >
+          Tocar música aleatória (C)
+        </button>
+      </div>
+
       {/* Status de Ativação no canto superior direito */}
       {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
         <div className="absolute top-8 right-8 z-20 px-4">
@@ -258,147 +367,137 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Status de Sincronização no canto inferior esquerdo */}
-      {(syncMessage || isDownloading) && (
-        <div className="absolute bottom-8 left-8 z-20">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-black/60 backdrop-blur-sm border border-cyan-400/30">
-            {isDownloading && (
-              <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            )}
-            <span className="text-cyan-400 text-sm">
-              {syncMessage || "Sincronizando..."}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Barra inferior: busca + status + QR */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 min-h-72 bg-stone-100/90 backdrop-blur-sm flex items-center justify-between pl-0 pr-8 py-6 gap-8">
+        {/* Esquerda: título, busca e instruções (input no start, sem espaço lateral) */}
+        <div className="min-w-0 max-w-3xl space-y-4 flex-1 flex flex-col items-start pl-8">
+          <h1 className="text-3xl md:text-4xl text-stone-900 font-semibold tracking-wide">
+            {ativacaoStatus.tipo === "assinatura"
+              ? "Busque por código, nome ou artista"
+              : "Digite o código da música"}
+          </h1>
 
-      {/* Indicador de status de conexão e músicas offline */}
-      {!syncMessage && !isDownloading && (
-        <div className="absolute bottom-8 left-8 z-20">
-          <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-sm">
-            {/* Indicador Online/Offline */}
-            <div className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
-              <span className={`text-xs ${isOnline ? 'text-green-400' : 'text-red-400'}`}>
-                {isOnline ? 'Online' : 'Offline'}
-              </span>
-            </div>
-            {/* Contador de músicas offline */}
-            {offline.musicasOffline > 0 && (
-              <>
-                <span className="text-white/30">|</span>
-                <span className="text-white/60 text-xs">
-                  🎵 {offline.musicasOffline} músicas
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* QR Code no canto inferior direito */}
-      <div className="absolute bottom-8 right-8 z-20">
-        <div className="rounded-2xl overflow-hidden shadow-2xl border border-cyan-400/30">
-          <Image
-            src="/qr-code.png"
-            alt="QR Code"
-            width={140}
-            height={140}
-            className="block"
-          />
-        </div>
-      </div>
-
-      {/* Conteúdo principal */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-3xl w-full space-y-12">
-          {/* Título */}
-          <div className="text-center space-y-3">
-            <h1 className="text-3xl md:text-4xl text-white/95 font-semibold tracking-wide">
-              {/* 
-                DIFERENCIAÇÃO POR TIPO DE CHAVE:
-                - tipo "assinatura": Usuários que pagam assinatura (versão online com busca completa)
-                - tipo "maquina": Máquinas de karaokê (versão offline, apenas código)
-              */}
-              {ativacaoStatus.tipo === "assinatura" 
-                ? "Busque por código, nome ou artista" 
-                : "Digite o código da música"}
-            </h1>
-            <div className="h-0.5 w-24 mx-auto bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent" />
-          </div>
-
-          {/* 
-            INTERFACE CONDICIONAL BASEADA NO TIPO DE CHAVE:
-            - Assinantes (tipo "assinatura"): Input unificado que busca código OU nome/artista
-            - Máquinas (tipo "maquina"): Apenas input de código (5 dígitos)
-          */}
-          {ativacaoStatus.ativada && 
-           !ativacaoStatus.expirada && 
+          {ativacaoStatus.ativada &&
+           !ativacaoStatus.expirada &&
            ativacaoStatus.tipo === "assinatura" ? (
             <UnifiedSearch />
           ) : (
-          <div className="flex justify-center">
-            <div className={`inline-flex gap-3 p-8 rounded-3xl bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border border-white/10 shadow-2xl ${
-              (!ativacaoStatus.ativada || ativacaoStatus.expirada) && ativacaoStatus.modo !== "loading"
-                ? "opacity-50 pointer-events-none"
-                : ""
-            }`}>
-              {[0, 1, 2, 3, 4].map((index) => {
-                const hasValue = codigo[index]
-
-                return (
-                  <div
-                    key={index}
-                    className={`relative w-16 h-20 md:w-20 md:h-24 flex items-center justify-center rounded-xl transition-all duration-300 ${
-                      error
-                        ? "bg-red-500/20 border-2 border-red-500 animate-shake"
-                        : hasValue
-                          ? "bg-cyan-400/20 border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.3)]"
-                          : "bg-white/5 border-2 border-white/20"
-                    }`}
-                  >
-                    <span
-                      className={`text-4xl md:text-5xl font-bold transition-all ${
-                        hasValue ? "text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "text-white/30"
+            <div className="flex justify-start">
+              <div
+                className={`inline-flex gap-2 p-6 rounded-2xl bg-white/80 border border-stone-200 shadow-sm ${
+                  !ativacaoStatus.ativada || ativacaoStatus.expirada
+                    ? "opacity-50 pointer-events-none"
+                    : ""
+                }`}
+              >
+                {[0, 1, 2, 3, 4].map((index) => {
+                  const hasValue = codigo[index]
+                  return (
+                    <div
+                      key={index}
+                      className={`relative w-16 h-20 md:w-20 md:h-24 flex items-center justify-center rounded-xl transition-all duration-300 ${
+                        error
+                          ? "bg-red-100 border-2 border-red-500 animate-shake"
+                          : hasValue
+                            ? "bg-cyan-100 border-2 border-cyan-500 shadow-sm"
+                            : "bg-stone-100 border-2 border-stone-300"
                       }`}
                     >
-                      {codigo[index] || "•"}
-                    </span>
-                  </div>
-                )
-              })}
+                      <span
+                        className={`text-4xl md:text-5xl font-bold ${
+                          hasValue ? "text-cyan-800" : "text-stone-500"
+                        }`}
+                      >
+                        {codigo[index] || "•"}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
           )}
 
-          {/* Mensagem de erro */}
           {error && (
-            <div className="text-center animate-pulse">
-              <p className="text-red-400 text-xl font-medium">Código inválido! Tente novamente.</p>
-            </div>
+            <p className="text-red-700 text-base font-medium">Código inválido! Tente novamente.</p>
           )}
 
-          {/* Instruções - condicionais por tipo de usuário */}
-          <div className="text-center space-y-2">
+          <div className="space-y-0.5 text-stone-700 text-base">
             {ativacaoStatus.tipo === "assinatura" ? (
               <>
-                <p className="text-white/60 text-lg">
-                  Digite o <span className="text-cyan-400 font-semibold">código</span> ou <span className="text-cyan-400 font-semibold">nome da música</span>
-                </p>
-                <p className="text-white/40 text-sm">
-                  Pressione <span className="text-cyan-400 font-semibold">Enter</span> ou clique no resultado
-                </p>
+                <p>Digite o <span className="font-semibold text-stone-900">código</span> ou <span className="font-semibold text-stone-900">nome da música</span></p>
+                <p className="text-stone-600">Pressione <span className="font-medium text-stone-800">Enter</span> ou clique no resultado</p>
               </>
             ) : (
               <>
-            <p className="text-white/60 text-lg">
-              Use as teclas <span className="text-cyan-400 font-semibold">0 - 9</span> para digitar
-            </p>
-            <p className="text-white/40 text-sm">
-              Pressione <span className="text-cyan-400 font-semibold">Enter</span> quando tiver 5 dígitos
-            </p>
+                <p>Use as teclas <span className="font-semibold text-stone-900">0 - 9</span> para digitar</p>
+                <p className="text-stone-600">Pressione <span className="font-medium text-stone-800">Enter</span> quando tiver 5 dígitos</p>
               </>
             )}
+          </div>
+        </div>
+
+        {/* Centro da barra: dados do item selecionado (título, autor, código) — portal do UnifiedSearch */}
+        {ativacaoStatus.ativada && !ativacaoStatus.expirada && ativacaoStatus.tipo === "assinatura" && (
+          <div id="search-selected-center" className="flex-1 min-w-0 flex items-center justify-center px-4" />
+        )}
+
+        {/* Direita: status, download e QR (fixo no canto, como antes) */}
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          {(syncMessage || isDownloading) ? (
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white border-2 border-stone-300 text-stone-800 shadow-sm">
+              {isDownloading && (
+                <div className="w-5 h-5 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin" />
+              )}
+              <span className="text-base text-stone-900">{syncMessage || "Sincronizando..."}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white border-2 border-stone-300 text-stone-800 shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"} animate-pulse`} />
+                <span className={`text-base font-medium ${isOnline ? "text-green-800" : "text-red-800"}`}>
+                  {isOnline ? "Online" : "Offline"}
+                </span>
+              </div>
+              {offline.musicasOffline > 0 && (
+                <>
+                  <span className="text-stone-400">|</span>
+                  <span className="text-stone-600 text-base">🎵 {offline.musicasOffline} músicas</span>
+                </>
+              )}
+            </div>
+          )}
+          {isActivated && (
+            <button
+              type="button"
+              onClick={toggleBlockDownloads}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-base font-medium transition-colors ${
+                blockDownloads
+                  ? "bg-amber-100 text-amber-900 border border-amber-500 hover:bg-amber-200"
+                  : "bg-stone-200 text-stone-900 border border-stone-400 hover:bg-stone-300"
+              }`}
+              title={blockDownloads ? "Permitir novos downloads" : "Impedir novos downloads"}
+            >
+              {blockDownloads ? (
+                <>
+                  <Download className="h-5 w-5" aria-hidden />
+                  Permitir download
+                </>
+              ) : (
+                <>
+                  <Ban className="h-5 w-5" aria-hidden />
+                  Impedir download
+                </>
+              )}
+            </button>
+          )}
+          <div className="rounded-2xl overflow-hidden shadow-lg border border-stone-300">
+            <Image
+              src="/qr-code.png"
+              alt="QR Code"
+              width={140}
+              height={140}
+              className="block"
+            />
           </div>
         </div>
       </div>
@@ -408,6 +507,12 @@ export default function HomePage() {
         open={ativacaoDialogOpen}
         onOpenChange={setAtivacaoDialogOpen}
         onAtivacaoSucesso={handleAtivacaoSucesso}
+      />
+      <ConfiguracoesDialog
+        open={configDialogOpen}
+        onOpenChange={setConfigDialogOpen}
+        openAtLogin={openAtLogin}
+        setOpenAtLogin={setOpenAtLogin}
       />
     </main>
   )

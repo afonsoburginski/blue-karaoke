@@ -4,6 +4,8 @@ import { localDb } from "@/lib/db/local-db"
 import { ativacaoLocal } from "@/lib/db/local-schema"
 import { eq } from "drizzle-orm"
 
+export const runtime = "nodejs"
+
 export async function GET(request: NextRequest) {
   try {
     const resultado = await verificarAtivacao()

@@ -36,13 +36,17 @@ export function useAtivacao() {
     return null
   }, [])
 
-  // Verificação completa online (background)
+  // Verificação online — não sobrescrever com ativada: false se já tivermos ativada: true (evita reabrir diálogo)
   const verificarOnline = useCallback(async () => {
     try {
       const response = await fetch("/api/ativacao/verificar")
       if (response.ok) {
         const resultado = await response.json()
-        setStatus(resultado)
+        setStatus((prev) => {
+          if (resultado.ativada) return resultado
+          if (prev.ativada && !prev.expirada) return prev
+          return resultado
+        })
       }
     } catch {
       // Silently fail - keep offline data

@@ -1,5 +1,5 @@
 
-const { app, BrowserWindow, Menu, dialog } = require("electron")
+const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain } = require("electron")
 const path = require("path")
 const { spawn, fork } = require("child_process")
 const fs = require("fs")
@@ -83,6 +83,7 @@ function createWindow() {
     height: 1080,
     minWidth: 1024,
     minHeight: 768,
+    fullscreen: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -96,7 +97,7 @@ function createWindow() {
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show()
-    mainWindow.maximize()
+    mainWindow.setFullScreen(true)
   })
 
   const startUrl = `http://localhost:${PORT}`
@@ -155,7 +156,32 @@ function createWindow() {
     })
 
   mainWindow.on("closed", () => {
+    globalShortcut.unregister("Escape")
     mainWindow = null
+  })
+
+  mainWindow.once("ready-to-show", () => {
+    globalShortcut.register("Escape", () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close()
+      }
+    })
+  })
+
+  // Bloquear Num Lock para o teclado sempre estar ativo (evitar desativar por engano)
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    const isNumLock = (input.key === "NumLock" || input.code === "NumLock") && (input.type === "keyDown" || input.type === "rawKeyDown")
+    if (isNumLock) {
+      event.preventDefault()
+      return
+    }
+    const isEscape = (input.key === "Escape" || input.keyCode === "Escape") && (input.type === "keyDown" || input.type === "rawKeyDown")
+    if (isEscape) {
+      event.preventDefault()
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close()
+      }
+    }
   })
 
   // Log de erros
@@ -297,7 +323,30 @@ app.whenReady().then(async () => {
   
   // Remover menu bar
   Menu.setApplicationMenu(null)
-  
+
+  // Handler para Esc sair (registrado antes de criar janela para evitar "No handler registered")
+  ipcMain.handle("app-quit", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.close()
+    }
+  })
+
+  ipcMain.handle("app-minimize", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.minimize()
+    }
+  })
+
+  ipcMain.handle("get-open-at-login", () => {
+    const settings = app.getLoginItemSettings()
+    return { openAtLogin: settings.openAtLogin }
+  })
+
+  ipcMain.handle("set-open-at-login", (_event, openAtLogin) => {
+    app.setLoginItemSettings({ openAtLogin, path: process.execPath })
+    return {}
+  })
+
   try {
     await startNextServer()
     createWindow()

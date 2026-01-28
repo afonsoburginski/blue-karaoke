@@ -43,7 +43,8 @@ module.exports = {
     signAndEditExecutable: false,
   },
   nsis: {
-    oneClick: true,
+    oneClick: false,
+    allowToChangeInstallationDirectory: true,
     perMachine: true,
     createDesktopShortcut: "always",
     createStartMenuShortcut: true,

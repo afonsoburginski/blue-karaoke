@@ -28,10 +28,11 @@ interface SyncStatus {
 interface UseAutoSyncOptions {
   intervalMinutes?: number
   isActivated?: boolean  // Se o usuário tem chave válida
+  blockDownloads?: boolean  // Se true, não faz download (metadados, arquivos, batch)
 }
 
 export function useAutoSync(options: UseAutoSyncOptions = {}) {
-  const { intervalMinutes = 30, isActivated = false } = options
+  const { intervalMinutes = 30, isActivated = false, blockDownloads = false } = options
   
   const [status, setStatus] = useState<SyncStatus>({
     isOnline: typeof navigator !== "undefined" ? navigator.onLine : false,
@@ -71,7 +72,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
 
   // Baixar metadados das músicas
   const downloadMetadata = useCallback(async () => {
-    if (!isActivated) return // Silenciosamente ignora se não ativado
+    if (!isActivated || blockDownloads) return
     setStatus((prev) => ({ ...prev, isSyncing: true, error: null }))
 
     try {
@@ -106,11 +107,11 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
         error: errorMessage,
       }))
     }
-  }, [isActivated, checkOfflineStatus])
+  }, [isActivated, blockDownloads, checkOfflineStatus])
 
   // Baixar todas as músicas para offline
   const downloadAllForOffline = useCallback(async () => {
-    if (!isActivated) return
+    if (!isActivated || blockDownloads) return
     setStatus((prev) => ({ 
       ...prev, 
       isDownloading: true, 
@@ -152,11 +153,11 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
         downloadProgress: null,
       }))
     }
-  }, [isActivated, checkOfflineStatus])
+  }, [isActivated, blockDownloads, checkOfflineStatus])
 
   // Baixar músicas em lote (background)
   const downloadBatch = useCallback(async () => {
-    if (!isActivated) return // Silenciosamente ignora se não ativado
+    if (!isActivated || blockDownloads) return
     if (status.isDownloading || status.isSyncing) return
 
     try {
@@ -179,7 +180,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
     } catch (error) {
       console.error("[AutoSync] Erro no download em lote:", error)
     }
-  }, [isActivated, status.isDownloading, status.isSyncing, checkOfflineStatus])
+  }, [isActivated, blockDownloads, status.isDownloading, status.isSyncing, checkOfflineStatus])
 
   // Iniciar download em background automaticamente
   const startBackgroundDownload = useCallback(() => {
@@ -233,10 +234,10 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
 
   // Iniciar download em background quando há músicas pendentes E usuário está ativado
   useEffect(() => {
-    if (!isActivated) return
+    if (!isActivated || blockDownloads) return
     if (!status.isOnline) return
     if (status.isDownloading || status.isSyncing) return
-    
+
     // Se há músicas para baixar, iniciar em background após 10 segundos
     if (status.offline.musicasOnline > 0) {
       const timer = setTimeout(() => {
@@ -245,7 +246,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
       
       return () => clearTimeout(timer)
     }
-  }, [isActivated, status.isOnline, status.offline.musicasOnline, status.isDownloading, status.isSyncing, downloadBatch])
+  }, [isActivated, blockDownloads, status.isOnline, status.offline.musicasOnline, status.isDownloading, status.isSyncing, downloadBatch])
 
   return {
     ...status,

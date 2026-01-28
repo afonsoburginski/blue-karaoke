@@ -4,7 +4,9 @@ import { ativacaoLocal } from "@/lib/db/local-schema"
 import { eq } from "drizzle-orm"
 import { ensureLocalDbInitialized } from "@/lib/db/auto-init"
 
-// Rota otimizada para verificação rápida offline (< 50ms)
+export const runtime = "nodejs"
+
+// Rota otimizada para verificação rápida offline (< 50ms) – usa SQLite local
 export async function GET(request: NextRequest) {
   try {
     await ensureLocalDbInitialized()

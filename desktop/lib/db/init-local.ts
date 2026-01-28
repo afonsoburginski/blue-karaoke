@@ -1,7 +1,6 @@
-import { sqlite } from "./local-db"
-
 /**
- * Inicializa o banco de dados local criando as tabelas se não existirem
+ * Inicializa o banco de dados local criando as tabelas se não existirem.
+ * Usa import dinâmico para não carregar better-sqlite3 no Edge/middleware.
  */
 export async function initLocalDb() {
   try {

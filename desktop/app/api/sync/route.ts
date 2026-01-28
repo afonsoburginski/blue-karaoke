@@ -8,6 +8,8 @@ import {
 } from "@/lib/sync-download"
 import { ensureLocalDbInitialized } from "@/lib/db/auto-init"
 
+export const runtime = "nodejs"
+
 /**
  * API route para sincronização offline
  * 

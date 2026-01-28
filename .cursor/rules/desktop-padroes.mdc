@@ -1,0 +1,27 @@
+---
+description: Padrões da interface desktop (Blue Karaoke Electron)
+globs: desktop/**/*
+---
+
+# Padrões da interface desktop
+
+## Configurações e atalho F12
+
+- **Atalho:** F12 abre o dialog de Configurações (em qualquer tela: home e página de tocar).
+- **Label na barra:** O botão na barra superior deve sempre exibir **"Configurações (F12)"** (não apenas "Configurações"), para deixar claro o atalho.
+- **Comportamento:** `preventDefault()` no F12 para não abrir DevTools; o dialog de configurações lista F12 em "Comandos e atalhos" como primeiro item: "F12 – Abrir configurações (padrão do app)".
+
+Ao adicionar novas telas com barra superior, incluir o botão "Configurações (F12)" e o listener de tecla F12 que chama `setConfigDialogOpen(true)`.
+
+## Barra de tarefas (atalhos em texto, sem aparência de botão)
+
+Itens exibidos na barra superior, no mesmo estilo de link (texto cinza, hover sublinhado):
+
+- **Configurações (F12)** — abre o dialog de configurações
+- **Fechar Programa (ESC)** — só no Electron; chama `window.electron.quit()`
+- **Minimizar Programa (Espaço)** — só no Electron; chama `window.electron.minimize()`
+- **Tocar música aleatória (C)** — GET `/api/musicas/aleatoria` e navega para `/tocar/[codigo]`
+- **Pausar música (P)** — na tela de tocar: pause/play do `<video>` (não aplica a YouTube)
+- **Reiniciar música (+)** — na tela de tocar: `video.currentTime = 0` e play; na home: voltar à tela inicial
+
+Atalhos globais (Esc = fechar, Espaço = minimizar) são tratados em `EscQuitHandler`; não capturar em inputs.

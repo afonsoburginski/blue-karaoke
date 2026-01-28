@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { validarChaveOnline } from "@/lib/ativacao"
+import { validarChaveOnline } from "@/lib/ativacao-online"
+
+export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
