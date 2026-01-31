@@ -370,42 +370,27 @@ export default function HomePage() {
         {/* Esquerda: título, busca e instruções (input no start, sem espaço lateral) */}
         <div className="min-w-0 max-w-3xl space-y-4 flex-1 flex flex-col items-start pl-8">
           <h1 className="text-3xl md:text-4xl text-stone-900 font-semibold tracking-wide">
-            {ativacaoStatus.tipo === "assinatura"
-              ? "Busque por código, nome ou artista"
-              : "Digite o código da música"}
+            Busque por código, nome ou artista
           </h1>
 
-          {ativacaoStatus.ativada &&
-           !ativacaoStatus.expirada &&
-           ativacaoStatus.tipo === "assinatura" ? (
+          {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
             <UnifiedSearch />
-          ) : (
+          )}
+
+          {/* UI de 5 dígitos mantida no código mas não exibida — só input unificado (código + texto) e select */}
+          {false && (
             <div className="flex justify-start">
-              <div
-                className={`inline-flex gap-2 p-6 rounded-2xl bg-white/80 border border-stone-200 shadow-sm ${
-                  !ativacaoStatus.ativada || ativacaoStatus.expirada
-                    ? "opacity-50 pointer-events-none"
-                    : ""
-                }`}
-              >
+              <div className="inline-flex gap-2 p-6 rounded-2xl bg-white/80 border border-stone-200 shadow-sm">
                 {[0, 1, 2, 3, 4].map((index) => {
                   const hasValue = codigo[index]
                   return (
                     <div
                       key={index}
                       className={`relative w-16 h-20 md:w-20 md:h-24 flex items-center justify-center rounded-xl transition-all duration-300 ${
-                        error
-                          ? "bg-red-100 border-2 border-red-500 animate-shake"
-                          : hasValue
-                            ? "bg-cyan-100 border-2 border-cyan-500 shadow-sm"
-                            : "bg-stone-100 border-2 border-stone-300"
+                        error ? "bg-red-100 border-2 border-red-500 animate-shake" : hasValue ? "bg-cyan-100 border-2 border-cyan-500 shadow-sm" : "bg-stone-100 border-2 border-stone-300"
                       }`}
                     >
-                      <span
-                        className={`text-4xl md:text-5xl font-bold ${
-                          hasValue ? "text-cyan-800" : "text-stone-500"
-                        }`}
-                      >
+                      <span className={`text-4xl md:text-5xl font-bold ${hasValue ? "text-cyan-800" : "text-stone-500"}`}>
                         {codigo[index] || "•"}
                       </span>
                     </div>
@@ -419,23 +404,16 @@ export default function HomePage() {
             <p className="text-red-700 text-base font-medium">Código inválido! Tente novamente.</p>
           )}
 
-          <div className="space-y-0.5 text-stone-700 text-2xl">
-            {ativacaoStatus.tipo === "assinatura" ? (
-              <>
-                <p>Digite o <span className="font-semibold text-stone-900">código</span> ou <span className="font-semibold text-stone-900">nome da música</span></p>
-                <p className="text-stone-600">Pressione <span className="font-medium text-stone-800">Enter</span> ou clique no resultado</p>
-              </>
-            ) : (
-              <>
-                <p>Use as teclas <span className="font-semibold text-stone-900">0 - 9</span> para digitar</p>
-                <p className="text-stone-600">Pressione <span className="font-medium text-stone-800">Enter</span> quando tiver 5 dígitos</p>
-              </>
-            )}
-          </div>
+          {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
+            <div className="space-y-0.5 text-stone-700 text-2xl">
+              <p>Digite o <span className="font-semibold text-stone-900">código</span> ou <span className="font-semibold text-stone-900">nome da música</span></p>
+              <p className="text-stone-600">Pressione <span className="font-medium text-stone-800">Enter</span> ou clique no resultado</p>
+            </div>
+          )}
         </div>
 
         {/* Centro da barra: dados do item selecionado (título, autor, código) — portal do UnifiedSearch */}
-        {ativacaoStatus.ativada && !ativacaoStatus.expirada && ativacaoStatus.tipo === "assinatura" && (
+        {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
           <div id="search-selected-center" className="flex-1 min-w-0 flex items-center justify-center px-4" />
         )}
 
