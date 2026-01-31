@@ -24,7 +24,7 @@
     "electron:start": "concurrently \"cross-env NODE_ENV=development next dev --webpack\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
     "electron:build": "next build --webpack && electron-builder",
     "electron:build:win": "next build --webpack && npm run electron:prepare-standalone && npx electron-rebuild -f -w better-sqlite3 && npm run electron:copy-sqlite && electron-builder --win --config electron-builder.config.js",
-    "electron:build:win:publish": "next build --webpack && npm run electron:prepare-standalone && npx electron-rebuild -f -w better-sqlite3 && npm run electron:copy-sqlite && electron-builder --win --config electron-builder.config.js --publish always",
+    "electron:build:win:publish": "next build --webpack && npm run electron:prepare-standalone && npx electron-rebuild -f -w better-sqlite3 && npm run electron:copy-sqlite && electron-builder --win --x64 --ia32 --config electron-builder.config.js --publish always",
     "electron:prepare-standalone": "npx shx cp -r .next/static .next/standalone/.next/ && npx shx cp -r public .next/standalone/",
     "electron:copy-sqlite": "npx shx rm -rf .next/standalone/node_modules/better-sqlite3 && npx shx cp -r node_modules/better-sqlite3 .next/standalone/node_modules/",
     "electron:build:linux": "next build --webpack && electron-builder --linux",

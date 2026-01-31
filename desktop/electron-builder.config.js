@@ -47,7 +47,6 @@ module.exports = {
     target: "nsis",
     icon: "public/icon.png",
     signAndEditExecutable: false,
-    arch: ["x64", "ia32"],
   },
   nsis: {
     oneClick: false,
