@@ -8,7 +8,7 @@
   "homepage": "./",
   "repository": { "type": "git", "url": "https://github.com/SEU_USUARIO/blue-karaoke.git" },
   "scripts": {
-    "build": "next build",
+    "build": "next build --webpack",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -28,6 +28,7 @@
     "electron:prepare-standalone": "npx shx cp -r .next/static .next/standalone/.next/ && npx shx cp -r public .next/standalone/",
     "electron:copy-sqlite": "npx shx rm -rf .next/standalone/node_modules/better-sqlite3 && npx shx cp -r node_modules/better-sqlite3 .next/standalone/node_modules/",
     "electron:build:linux": "next build --webpack && electron-builder --linux",
+    "electron:build:linux:publish": "next build --webpack && npm run electron:prepare-standalone && npx electron-rebuild -f -w better-sqlite3 && npm run electron:copy-sqlite && electron-builder --linux --config electron-builder.config.js --publish always",
     "electron:build:mac": "next build --webpack && electron-builder --mac",
     "electron:pack": "next build --webpack && electron-builder --dir",
     "postinstall": "echo 'Skipping electron rebuild. Run bun run electron:rebuild when needed for production build.'",

@@ -1,12 +1,12 @@
 # Publica release do Blue Karaoke (desktop) no GitHub.
 #
 # Disparos:
-# 1) A cada push em main → nova release com versão 1.0.<run_number> (ex.: 1.0.42)
-# 2) Ao enviar uma tag v* → release com a versão da tag (ex.: v1.0.1 → 1.0.1)
+# 1) A cada push em main → nova release com versão 1.0.<run_number>
+# 2) Ao enviar uma tag v* → release com a versão da tag
 #
-# O workflow faz o build no Windows e publica a release com o instalador anexado.
+# Builds: Windows (x64 + ia32) e Linux (Ubuntu: .deb + .tar.gz).
 
-name: Release Desktop (Windows)
+name: Release Desktop (Windows + Linux)
 
 on:
   push:
@@ -16,7 +16,7 @@ on:
       - "v*"
 
 jobs:
-  release:
+  build-windows:
     runs-on: windows-latest
     defaults:
       run:
@@ -36,7 +36,6 @@ jobs:
         with:
           bun-version: latest
 
-      # Versão: se for tag v* usa a tag; senão (push em main) usa 1.0.<run_number>
       - name: Definir versão
         id: version
         run: |
@@ -58,13 +57,67 @@ jobs:
       - name: Instalar dependências (Bun)
         run: bun install
 
-      - name: Build e publicar no GitHub Release
+      - name: Build Windows (x64 + ia32) e publicar
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun run electron:build:win:publish
 
-      - name: Upload artefatos da release (opcional)
+      - name: Upload artefatos Windows
         uses: actions/upload-artifact@v4
         with:
-          name: BlueKaraoke-Windows-${{ steps.version.outputs.version }}
+          name: windows-${{ steps.version.outputs.version }}
           path: desktop/release/*.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: build-windows
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Definir versão
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="1.0.${{ github.run_number }}"
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "Versão: $version"
+
+      - name: Atualizar versão no package.json
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$version\"/" package.json
+          grep version package.json
+
+      - name: Instalar dependências (Bun)
+        run: bun install
+
+      - name: Build Linux (deb + tar.gz) e publicar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun run electron:build:linux:publish
+
+      - name: Upload artefatos Linux
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ steps.version.outputs.version }}
+          path: |
+            desktop/release/*.deb
+            desktop/release/*.tar.gz

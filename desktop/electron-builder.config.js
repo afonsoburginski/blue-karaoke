@@ -47,6 +47,7 @@ module.exports = {
     target: "nsis",
     icon: "public/icon.png",
     signAndEditExecutable: false,
+    arch: ["x64", "ia32"],
   },
   nsis: {
     oneClick: false,
@@ -57,7 +58,7 @@ module.exports = {
   },
   forceCodeSigning: false,
   linux: {
-    target: ["tar.gz"],
+    target: ["deb", "tar.gz"],
     icon: "public/icon.png",
     category: "AudioVideo",
   },
