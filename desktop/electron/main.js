@@ -107,9 +107,20 @@ function createWindow() {
   })
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show()
     mainWindow.setFullScreen(true)
+    mainWindow.show()
   })
+
+  // Em produção o fullscreen às vezes não "gruda" no Windows; forçar de novo após mostrar
+  if (app.isPackaged) {
+    mainWindow.once("show", () => {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setFullScreen(true)
+        }
+      }, 100)
+    })
+  }
 
   const startUrl = `http://localhost:${PORT}`
   

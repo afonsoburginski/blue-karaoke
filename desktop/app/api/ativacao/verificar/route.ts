@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verificarAtivacao } from "@/lib/ativacao"
+import { ensureLocalDbInitialized } from "@/lib/db/auto-init"
 import { localDb } from "@/lib/db/local-db"
 import { ativacaoLocal } from "@/lib/db/local-schema"
 import { eq } from "drizzle-orm"
@@ -8,8 +9,9 @@ export const runtime = "nodejs"
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureLocalDbInitialized()
     const resultado = await verificarAtivacao()
-    
+
     // Buscar tipo da chave do banco local
     const [ativacao] = await localDb
       .select()

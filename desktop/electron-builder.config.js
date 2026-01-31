@@ -54,6 +54,8 @@ module.exports = {
     perMachine: true,
     createDesktopShortcut: "always",
     createStartMenuShortcut: true,
+    installerLanguages: ["pt_BR", "en"],
+    // Wizard completo: usuário escolhe pasta (qualquer disco/partição) antes de instalar
   },
   forceCodeSigning: false,
   linux: {
