@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Kbd } from "@/components/ui/kbd"
 import { RefreshCw, Download, Loader2 } from "lucide-react"
 
+// Atualizações via electron-updater (GitHub Releases).
+
 interface ConfiguracoesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
