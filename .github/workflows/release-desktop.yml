@@ -8,6 +8,10 @@
 
 name: Release Desktop (Windows + Linux)
 
+# Permissão para criar releases e fazer upload dos instaladores
+permissions:
+  contents: write
+
 on:
   push:
     branches:
