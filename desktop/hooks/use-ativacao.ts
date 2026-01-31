@@ -55,12 +55,12 @@ export function useAtivacao() {
 
   // Verificação pública (para revalidar após ativação)
   const verificar = useCallback(async () => {
-    // Primeiro carrega offline (rápido)
+    // Primeiro carrega offline (rápido) — após salvar-local, o SQLite já tem a chave
     const offlineStatus = await verificarOfflineRapido()
     if (offlineStatus) {
       setStatus(offlineStatus)
     }
-    // Depois valida online em background
+    // Depois valida online em background; se falhar, mantém o status offline (não sobrescreve com ativada: false)
     await verificarOnline()
   }, [verificarOfflineRapido, verificarOnline])
 

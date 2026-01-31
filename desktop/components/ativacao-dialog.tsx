@@ -83,16 +83,14 @@ export function AtivacaoDialog({
           // Não bloqueia: validação já foi no Supabase; local é cache
         }
 
-        // Callback verifica status e fecha o diálogo no parent; evitamos reabertura
-        setTimeout(async () => {
-          const result = onAtivacaoSucesso?.()
-          if (result && typeof (result as Promise<unknown>).then === "function") {
-            await (result as Promise<unknown>)
-          }
-          setChave("")
-          setSuccess(false)
-          setDiasRestantes(null)
-        }, 2000)
+        // Imediatamente notificar sucesso: parent atualiza estado e fecha diálogo (evita reabertura ao digitar)
+        const result = onAtivacaoSucesso?.()
+        if (result && typeof (result as Promise<unknown>).then === "function") {
+          await (result as Promise<unknown>)
+        }
+        setChave("")
+        setSuccess(false)
+        setDiasRestantes(null)
       } else {
         setError(resultado.error || "Chave de ativação inválida. Verifique se digitou corretamente.")
       }

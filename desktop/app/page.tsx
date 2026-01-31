@@ -30,9 +30,11 @@ export default function HomePage() {
   const router = useRouter()
   const { status: ativacaoStatus, verificar: verificarAtivacao } = useAtivacao()
   const acabouDeAtivarRef = useRef(false)
+  const [justActivated, setJustActivated] = useState(false)
 
   // Verifica se está ativado para permitir downloads
   const isActivated = ativacaoStatus.ativada && !ativacaoStatus.expirada
+  const isActivatedOrJustActivated = isActivated || justActivated
 
   const toggleBlockDownloads = useCallback(() => {
     setBlockDownloads((prev) => {
@@ -74,23 +76,32 @@ export default function HomePage() {
     }
   }, [downloadMetadata, downloadAllForOffline])
 
+  // Limpar "justActivated" quando o status real ficar ativado
+  useEffect(() => {
+    if (ativacaoStatus.ativada && !ativacaoStatus.expirada && justActivated) {
+      setJustActivated(false)
+    }
+  }, [ativacaoStatus.ativada, ativacaoStatus.expirada, justActivated])
+
   // Verificar ativação ao carregar — não reabrir logo após ativação bem-sucedida
   useEffect(() => {
     if (ativacaoStatus.modo === "loading") return
-    if (acabouDeAtivarRef.current) return
+    if (acabouDeAtivarRef.current || justActivated) return
 
     if (!ativacaoStatus.ativada || ativacaoStatus.expirada) {
       setAtivacaoDialogOpen(true)
     }
-  }, [ativacaoStatus])
+  }, [ativacaoStatus, justActivated])
 
   const handleAtivacaoSucesso = useCallback(async () => {
     acabouDeAtivarRef.current = true
-    await verificarAtivacao()
+    setJustActivated(true)
     setAtivacaoDialogOpen(false)
+    await verificarAtivacao()
     setTimeout(() => {
       acabouDeAtivarRef.current = false
-    }, 3000)
+    }, 5000)
+    setTimeout(() => setJustActivated(false), 15000)
   }, [verificarAtivacao])
 
   const handleSubmit = useCallback(async () => {
@@ -99,7 +110,7 @@ export default function HomePage() {
       return // Aguardar verificação
     }
     
-    if (!ativacaoStatus.ativada || ativacaoStatus.expirada) {
+    if (!isActivatedOrJustActivated) {
       setAtivacaoDialogOpen(true)
       return
     }
@@ -130,7 +141,7 @@ export default function HomePage() {
         setIsLoading(false)
       }, 2000)
     }
-  }, [codigo, isLoading, router, ativacaoStatus])
+  }, [codigo, isLoading, router, isActivatedOrJustActivated])
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -156,8 +167,8 @@ export default function HomePage() {
         return // Permitir entrada normal em inputs e diálogos
       }
 
-      // Bloquear input se não estiver ativado
-      if (!ativacaoStatus.ativada || ativacaoStatus.expirada) {
+      // Bloquear input e não reabrir diálogo se não estiver ativado (ou acabou de ativar)
+      if (!isActivatedOrJustActivated) {
         if (e.key !== "Escape") {
           e.preventDefault()
         }
@@ -222,7 +233,7 @@ export default function HomePage() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [codigo, error, isLoading, handleSubmit, ativacaoStatus, ativacaoDialogOpen, uploadDialogOpen, configDialogOpen, router])
+  }, [codigo, error, isLoading, handleSubmit, isActivatedOrJustActivated, ativacaoDialogOpen, uploadDialogOpen, configDialogOpen, router])
 
   // Electron: detectar ambiente e carregar "Iniciar com Windows"
   useEffect(() => {
@@ -345,7 +356,7 @@ export default function HomePage() {
       </div>
 
       {/* Status de Ativação no canto superior direito */}
-      {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
+      {isActivatedOrJustActivated && (
         <div className="absolute top-8 right-8 z-20 px-4">
           <div className="flex items-center gap-2 whitespace-nowrap text-white">
             {ativacaoStatus.diasRestantes !== null ? (
@@ -373,7 +384,7 @@ export default function HomePage() {
             Busque por código, nome ou artista
           </h1>
 
-          {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
+          {isActivatedOrJustActivated && (
             <UnifiedSearch />
           )}
 
@@ -404,7 +415,7 @@ export default function HomePage() {
             <p className="text-red-700 text-base font-medium">Código inválido! Tente novamente.</p>
           )}
 
-          {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
+          {isActivatedOrJustActivated && (
             <div className="space-y-0.5 text-stone-700 text-2xl">
               <p>Digite o <span className="font-semibold text-stone-900">código</span> ou <span className="font-semibold text-stone-900">nome da música</span></p>
               <p className="text-stone-600">Pressione <span className="font-medium text-stone-800">Enter</span> ou clique no resultado</p>
@@ -413,7 +424,7 @@ export default function HomePage() {
         </div>
 
         {/* Centro da barra: dados do item selecionado (título, autor, código) — portal do UnifiedSearch */}
-        {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
+        {isActivatedOrJustActivated && (
           <div id="search-selected-center" className="flex-1 min-w-0 flex items-center justify-center px-4" />
         )}
 
