@@ -30,8 +30,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: desktop/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       # Versão: se for tag v* usa a tag; senão (push em main) usa 1.0.<run_number>
       - name: Definir versão
@@ -52,13 +55,13 @@ jobs:
           (Get-Content $pkgPath) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content $pkgPath
           Get-Content $pkgPath | Select-String "version"
 
-      - name: Instalar dependências
-        run: npm ci
+      - name: Instalar dependências (Bun)
+        run: bun install --frozen-lockfile
 
       - name: Build e publicar no GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run electron:build:win:publish
+        run: bun run electron:build:win:publish
 
       - name: Upload artefatos da release (opcional)
         uses: actions/upload-artifact@v4
