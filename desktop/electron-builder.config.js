@@ -45,7 +45,7 @@ module.exports = {
   asar: false, // Desabilitar ASAR para evitar problemas com better-sqlite3
   win: {
     target: "nsis",
-    icon: "public/icon.png",
+    icon: "public/icon.ico",
     signAndEditExecutable: false,
   },
   nsis: {

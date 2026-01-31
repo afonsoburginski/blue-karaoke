@@ -101,7 +101,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       webSecurity: true,
     },
-    icon: path.join(__dirname, "../public/icon.png"),
+    icon: path.join(__dirname, process.platform === "win32" ? "../public/icon.ico" : "../public/icon.png"),
     show: false,
     titleBarStyle: "default",
   })
