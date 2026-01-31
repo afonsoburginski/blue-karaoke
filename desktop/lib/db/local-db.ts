@@ -8,12 +8,16 @@ const getDataPath = () => {
   if (process.env.NODE_ENV === "development") {
     return path.join(process.cwd(), "db.sqlite")
   }
-  // Em produção, usar o diretório de dados do usuário
+  // Em produção (release): Next.js roda em processo separado — usar env passado pelo Electron
+  const userData = process.env.BLUE_KARAOKE_USER_DATA
+  if (userData) {
+    return path.join(userData, "db.sqlite")
+  }
+  // Fallback: tentar Electron no mesmo processo (não ocorre no release)
   try {
     const { app } = require("electron")
     return path.join(app.getPath("userData"), "db.sqlite")
   } catch {
-    // Se não estiver no Electron, usar diretório padrão
     return path.join(process.cwd(), "db.sqlite")
   }
 }

@@ -248,12 +248,13 @@ function startNextServer() {
     try {
       console.log("Iniciando servidor Next.js...")
       
-      // Executar servidor como processo separado
+      // Executar servidor como processo separado (userData = pasta gravável para SQLite no release)
       const env = {
         ...process.env,
         PORT: PORT.toString(),
         NODE_ENV: "production",
-        ELECTRON_RUN_AS_NODE: "1"
+        ELECTRON_RUN_AS_NODE: "1",
+        BLUE_KARAOKE_USER_DATA: app.getPath("userData"),
       }
       
       nextServer = spawn(process.execPath, [serverPath], {

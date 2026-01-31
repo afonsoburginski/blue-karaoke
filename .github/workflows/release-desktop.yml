@@ -70,7 +70,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ steps.version.outputs.version }}
-          path: desktop/release/*.exe
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.yml
+            desktop/release/*.blockmap
 
   build-linux:
     runs-on: ubuntu-latest
@@ -166,6 +169,8 @@ jobs:
           generate_release_notes: true
           files: |
             win/*.exe
+            win/*.yml
+            win/*.blockmap
             linux/*.deb
             linux/*.tar.gz
         env:
