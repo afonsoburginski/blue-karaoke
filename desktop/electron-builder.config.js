@@ -4,7 +4,7 @@ module.exports = {
   executableName: "BlueKaraoke",
   publish: {
     provider: "github",
-    owner: process.env.GH_OWNER || "SEU_USUARIO",
+    owner: process.env.GH_OWNER || "afonsoburginski",
     repo: process.env.GH_REPO || "blue-karaoke",
     vPrefixedTagName: true,
   },
