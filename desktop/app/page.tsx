@@ -244,7 +244,7 @@ export default function HomePage() {
         <div 
           className="absolute inset-0 blur-sm scale-105"
           style={{
-            backgroundImage: `url('/images/karaoke-bg.jpg')`,
+            backgroundImage: `url('/images/image.png')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
@@ -272,7 +272,7 @@ export default function HomePage() {
       <div 
         className="absolute inset-0 blur-sm scale-105"
         style={{
-          backgroundImage: `url('/images/karaoke-bg.jpg')`,
+          backgroundImage: `url('/images/image.png')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
