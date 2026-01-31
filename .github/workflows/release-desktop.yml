@@ -62,6 +62,8 @@ jobs:
         run: bun install
 
       - name: Build Windows (x64 + ia32)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun run electron:build:win:ci
 
       - name: Upload artefatos Windows
@@ -112,6 +114,8 @@ jobs:
         run: bun install
 
       - name: Build Linux (deb + tar.gz)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun run electron:build:linux:ci
 
       - name: Upload artefatos Linux
