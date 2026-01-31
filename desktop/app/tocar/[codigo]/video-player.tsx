@@ -271,9 +271,10 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
 
   return (
     <div 
-      className={`relative min-h-screen bg-black transition-all duration-700 ${
+      className={`fixed inset-0 z-0 w-screen h-screen overflow-hidden bg-black transition-all duration-700 ${
         isExiting && !transitionToNextSong ? 'opacity-0 scale-105' : 'opacity-100 scale-100'
       }`}
+      style={{ maxWidth: '100vw', maxHeight: '100dvh' }}
     >
       {/* Logo no canto superior esquerdo */}
       <div className="absolute top-8 left-8 z-20">
@@ -294,10 +295,10 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
           <button
             type="button"
             onClick={() => setConfigDialogOpen(true)}
-            className="inline-flex items-center gap-2 text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+            className="inline-flex items-center gap-2 text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
             title="Configurações (F12)"
           >
-            <Settings className="h-4 w-4 opacity-70" aria-hidden />
+            <Settings className="h-5 w-5 opacity-70" aria-hidden />
             Configurações (F12)
           </button>
           <span className="text-stone-400 select-none">·</span>
@@ -306,7 +307,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
               <button
                 type="button"
                 onClick={() => (window as { electron?: { quit?: () => void } }).electron?.quit?.()}
-                className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+                className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
                 title="Fechar Programa (ESC)"
               >
                 Fechar Programa (ESC)
@@ -315,7 +316,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
               <button
                 type="button"
                 onClick={() => (window as { electron?: { minimize?: () => void } }).electron?.minimize?.()}
-                className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+                className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
                 title="Minimizar Programa (Espaço)"
               >
                 Minimizar Programa (Espaço)
@@ -333,7 +334,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
                 })
                 .catch(() => {})
             }}
-            className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
             title="Tocar música aleatória (C)"
           >
             Tocar música aleatória (C)
@@ -348,7 +349,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
                 else video.pause()
               }
             }}
-            className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
             title="Pausar música (P)"
           >
             Pausar música (P)
@@ -365,7 +366,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
                 router.push("/")
               }
             }}
-            className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
             title="Reiniciar (+)"
           >
             Reiniciar (+)
@@ -378,7 +379,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
               if (video) video.pause()
               router.push("/")
             }}
-            className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
             title="Cancelar (Delete) — para a música e volta à tela inicial"
           >
             Cancelar (Delete)
@@ -387,7 +388,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
           <button
             type="button"
             onClick={() => searchQuery.length > 0 && setSearchQuery((prev) => prev.slice(0, -1))}
-            className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
             title="Limpar último caractere (Backspace) — só quando estiver digitando"
           >
             Limpar (Backspace)
@@ -398,7 +399,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
       {/* Barra de busca: só aparece quando estiver pesquisando (tem algo no campo); some ao esvaziar ou ao escolher a próxima */}
       {searchQuery.length > 0 && (
         <div className="absolute bottom-0 left-0 right-0 z-20 min-h-48 bg-stone-100/90 backdrop-blur-sm flex flex-col justify-center pl-8 pr-8 py-4 gap-3">
-          <p className="text-stone-800 text-base font-medium">
+          <p className="text-stone-800 text-xl font-medium">
             Próxima música — digite o código ou busque por nome/artista
           </p>
           <UnifiedSearch
@@ -417,35 +418,37 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
               setSearchQuery("")
             }}
           />
-          <p className="text-stone-600 text-sm">
+          <p className="text-stone-600 text-lg">
             O que você digita no teclado aparece aqui. Enter no resultado ou 5 dígitos adiciona à fila.
           </p>
         </div>
       )}
 
       {/* Video player */}
-      {isYouTube ? (
-        <iframe
-          className="w-full h-screen"
-          src={`${musica.arquivo}?autoplay=1&mute=0&controls=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&playsinline=1`}
-          allow="autoplay; encrypted-media"
-          allowFullScreen
-          title="Karaoke Video"
-        />
-      ) : (
-        <video
-          ref={videoRef}
-          tabIndex={-1}
-          className="w-full h-screen object-contain bg-black"
-          src={videoSrc}
-          autoPlay
-          muted={false}
-          controls={false}
-          playsInline
-          loop={false}
-          onEnded={handleVideoEnd}
-        />
-      )}
+      <div className="absolute inset-0 overflow-hidden">
+        {isYouTube ? (
+          <iframe
+            className="w-full h-full border-0"
+            src={`${musica.arquivo}?autoplay=1&mute=0&controls=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&playsinline=1`}
+            allow="autoplay; encrypted-media"
+            allowFullScreen
+            title="Karaoke Video"
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            tabIndex={-1}
+            className="w-full h-full object-contain bg-black"
+            src={videoSrc}
+            autoPlay
+            muted={false}
+            controls={false}
+            playsInline
+            loop={false}
+            onEnded={handleVideoEnd}
+          />
+        )}
+      </div>
 
       {/* Camada transparente: recebe foco para teclado (Delete, +, Backspace, etc.) funcionar */}
       <div
@@ -457,7 +460,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
 
       {/* Overlay de transição */}
       {isExiting && (
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/80 via-black to-cyan-900/80 flex items-center justify-center z-30 animate-pulse">
+        <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-purple-900/80 via-black to-cyan-900/80 flex items-center justify-center z-30 animate-pulse">
           <div className="text-center space-y-4">
             <div className="w-16 h-16 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-white text-2xl font-semibold">Calculando sua pontuação...</p>
@@ -519,7 +522,7 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
       {!isExiting && (
         <div className="absolute bottom-6 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <div className="bg-black/30 backdrop-blur-sm px-4 py-2 rounded-full">
-            <p className="text-white/40 text-sm">
+            <p className="text-white/40 text-lg">
               Segure <span className="text-cyan-400/60 font-mono">Enter</span> para finalizar
             </p>
           </div>

@@ -34,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`${poppins.className} antialiased`}>
+      <body className={`${poppins.className} antialiased overflow-hidden`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           <FilaProximaProvider>
             <EscQuitHandler />

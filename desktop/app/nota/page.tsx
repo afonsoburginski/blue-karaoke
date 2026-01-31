@@ -123,7 +123,7 @@ function NotaContent() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-black via-purple-950/40 to-black relative overflow-hidden">
+    <main className="fixed inset-0 min-h-screen h-screen max-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-black via-purple-950/40 to-black relative overflow-hidden">
       
       {/* Animação de celebração (Lottie) - sobrepõe tudo */}
       {showCelebration && celebrationData && (
@@ -206,7 +206,7 @@ function NotaContent() {
 export default function NotaPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center bg-black">
+      <main className="fixed inset-0 min-h-screen h-screen overflow-hidden flex items-center justify-center bg-black">
         <div className="animate-pulse text-white text-xl">Carregando...</div>
       </main>
     }>

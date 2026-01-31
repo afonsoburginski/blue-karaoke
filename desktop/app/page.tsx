@@ -278,7 +278,6 @@ export default function HomePage() {
           backgroundRepeat: 'no-repeat',
         }}
       />
-      {/* Overlay escuro para melhor legibilidade */}
       <div className="absolute inset-0 bg-black/30 pointer-events-none" />
       <Spotlight />
 
@@ -295,14 +294,14 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="absolute left-0 right-0 z-20 top-40 md:top-44 bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 flex flex-wrap items-center gap-4">
+      <div className="absolute left-1/2 -translate-x-1/2 z-20 top-40 md:top-44 w-max bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 flex flex-wrap items-center gap-4 rounded-lg">
         <button
           type="button"
           onClick={() => setConfigDialogOpen(true)}
-          className="inline-flex items-center gap-2 text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          className="inline-flex items-center gap-2 text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
           title="Configurações (F12)"
         >
-          <Settings className="h-4 w-4 opacity-70" aria-hidden />
+          <Settings className="h-5 w-5 opacity-70" aria-hidden />
           Configurações (F12)
         </button>
         <span className="text-stone-400 select-none">·</span>
@@ -311,7 +310,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => window.electron?.quit?.()}
-              className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+              className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
               title="Fechar Programa (ESC)"
             >
               Fechar Programa (ESC)
@@ -320,7 +319,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => window.electron?.minimize?.()}
-              className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+              className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
               title="Minimizar Programa (Espaço)"
             >
               Minimizar Programa (Espaço)
@@ -338,7 +337,7 @@ export default function HomePage() {
               })
               .catch(() => {})
           }}
-          className="text-sm text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+          className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
           title="Tocar música aleatória (C)"
         >
           Tocar música aleatória (C)
@@ -348,13 +347,13 @@ export default function HomePage() {
       {/* Status de Ativação no canto superior direito */}
       {ativacaoStatus.ativada && !ativacaoStatus.expirada && (
         <div className="absolute top-8 right-8 z-20 px-4">
-          <div className="flex items-center gap-2 whitespace-nowrap">
+          <div className="flex items-center gap-2 whitespace-nowrap text-white">
             {ativacaoStatus.diasRestantes !== null ? (
-              <Calendar className="h-4 w-4 text-cyan-400 flex-shrink-0" />
+              <Calendar className="h-4 w-4 flex-shrink-0" />
             ) : (
-              <Clock className="h-4 w-4 text-cyan-400 flex-shrink-0" />
+              <Clock className="h-4 w-4 flex-shrink-0" />
             )}
-            <span className="text-cyan-400 text-sm md:text-base font-semibold">
+            <span className="text-sm md:text-base font-semibold">
               {ativacaoStatus.diasRestantes !== null
                 ? `${ativacaoStatus.diasRestantes} dias restantes`
                 : ativacaoStatus.horasRestantes !== null
@@ -420,7 +419,7 @@ export default function HomePage() {
             <p className="text-red-700 text-base font-medium">Código inválido! Tente novamente.</p>
           )}
 
-          <div className="space-y-0.5 text-stone-700 text-base">
+          <div className="space-y-0.5 text-stone-700 text-2xl">
             {ativacaoStatus.tipo === "assinatura" ? (
               <>
                 <p>Digite o <span className="font-semibold text-stone-900">código</span> ou <span className="font-semibold text-stone-900">nome da música</span></p>
@@ -447,20 +446,24 @@ export default function HomePage() {
               {isDownloading && (
                 <div className="w-5 h-5 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin" />
               )}
-              <span className="text-base text-stone-900">{syncMessage || "Sincronizando..."}</span>
+              <span className="text-xl text-stone-900">
+                {isDownloading
+                  ? `Baixando... (${offline.musicasOffline} de ${offline.totalMusicas || offline.musicasOffline + offline.musicasOnline || 0} músicas)`
+                  : (syncMessage || "Sincronizando...")}
+              </span>
             </div>
           ) : (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white border-2 border-stone-300 text-stone-800 shadow-sm">
               <div className="flex items-center gap-2">
                 <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"} animate-pulse`} />
-                <span className={`text-base font-medium ${isOnline ? "text-green-800" : "text-red-800"}`}>
+                <span className={`text-xl font-medium ${isOnline ? "text-green-800" : "text-red-800"}`}>
                   {isOnline ? "Online" : "Offline"}
                 </span>
               </div>
               {offline.musicasOffline > 0 && (
                 <>
                   <span className="text-stone-400">|</span>
-                  <span className="text-stone-600 text-base">🎵 {offline.musicasOffline} músicas</span>
+                  <span className="text-stone-600 text-xl">🎵 {offline.musicasOffline} músicas</span>
                 </>
               )}
             </div>
@@ -469,7 +472,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={toggleBlockDownloads}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-base font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xl font-medium transition-colors ${
                 blockDownloads
                   ? "bg-amber-100 text-amber-900 border border-amber-500 hover:bg-amber-200"
                   : "bg-stone-200 text-stone-900 border border-stone-400 hover:bg-stone-300"
@@ -489,8 +492,12 @@ export default function HomePage() {
               )}
             </button>
           )}
-          <QrCodesHome />
         </div>
+      </div>
+
+      {/* QR codes à direita da página, fora da barra branca (um acima do outro) */}
+      <div className="absolute right-8 bottom-80 z-20">
+        <QrCodesHome />
       </div>
 
       <UploadDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} />

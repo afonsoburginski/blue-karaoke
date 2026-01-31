@@ -31,9 +31,9 @@ export function QrCode({ value, label, imageSrc }: QrCodeProps) {
   )
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-lg border border-stone-300 bg-white p-3 flex flex-col items-center gap-1">
+    <div className="rounded-2xl overflow-hidden shadow-lg border border-stone-300 bg-white p-2 flex flex-col items-center gap-0.5">
       {label && (
-        <p className="text-xs font-medium text-stone-600 text-center">
+        <p className="text-xl font-bold text-stone-600 text-center">
           {label}
         </p>
       )}
@@ -48,7 +48,7 @@ const INSTAGRAM_URL = "https://www.instagram.com/bluekaraokesinop?igsh=MWJjamM4Y
 
 export function QrCodesHome() {
   return (
-    <div className="flex flex-row items-start gap-4">
+    <div className="flex flex-col items-end gap-2">
       <QrCode value={CATALOGO_URL} label="Catálogo" />
       <QrCode value={INSTAGRAM_URL} label="Instagram" />
     </div>
