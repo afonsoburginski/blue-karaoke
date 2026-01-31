@@ -2,17 +2,6 @@
 
 import { useEffect } from "react"
 
-declare global {
-  interface Window {
-    electron?: {
-      quit?: () => void
-      minimize?: () => void
-      getOpenAtLogin?: () => Promise<{ openAtLogin: boolean }>
-      setOpenAtLogin?: (openAtLogin: boolean) => Promise<void>
-    }
-  }
-}
-
 /**
  * No Electron: Esc fecha o app.
  * Só atua se window.electron.quit existir (ambiente Electron).

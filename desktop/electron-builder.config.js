@@ -2,6 +2,12 @@ module.exports = {
   appId: "com.bluekaraoke.app",
   productName: "Blue Karaoke",
   executableName: "BlueKaraoke",
+  publish: {
+    provider: "github",
+    owner: process.env.GH_OWNER || "SEU_USUARIO",
+    repo: process.env.GH_REPO || "blue-karaoke",
+    vPrefixedTagName: true,
+  },
   directories: {
     output: "release",
     buildResources: "build",

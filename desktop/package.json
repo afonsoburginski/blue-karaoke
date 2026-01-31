@@ -6,6 +6,7 @@
   "private": true,
   "main": "electron/main.js",
   "homepage": "./",
+  "repository": { "type": "git", "url": "https://github.com/SEU_USUARIO/blue-karaoke.git" },
   "scripts": {
     "build": "next build",
     "dev": "next dev",
@@ -20,8 +21,10 @@
     "db:delete": "tsx scripts/delete-musica.ts",
     "db:delete-all": "tsx scripts/delete-all.ts",
     "electron:dev": "concurrently \"cross-env NODE_ENV=development next dev --webpack\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+    "electron:start": "concurrently \"cross-env NODE_ENV=development next dev --webpack\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
     "electron:build": "next build --webpack && electron-builder",
     "electron:build:win": "next build --webpack && npm run electron:prepare-standalone && npx electron-rebuild -f -w better-sqlite3 && npm run electron:copy-sqlite && electron-builder --win --config electron-builder.config.js",
+    "electron:build:win:publish": "next build --webpack && npm run electron:prepare-standalone && npx electron-rebuild -f -w better-sqlite3 && npm run electron:copy-sqlite && electron-builder --win --config electron-builder.config.js --publish always",
     "electron:prepare-standalone": "npx shx cp -r .next/static .next/standalone/.next/ && npx shx cp -r public .next/standalone/",
     "electron:copy-sqlite": "npx shx rm -rf .next/standalone/node_modules/better-sqlite3 && npx shx cp -r node_modules/better-sqlite3 .next/standalone/node_modules/",
     "electron:build:linux": "next build --webpack && electron-builder --linux",
@@ -94,7 +97,8 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.0.3",
     "vaul": "^0.9.9",
-    "zod": "3.25.76"
+    "zod": "3.25.76",
+    "electron-updater": "^6.7.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",

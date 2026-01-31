@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Kbd } from "@/components/ui/kbd"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Download, Loader2 } from "lucide-react"
 
 interface ConfiguracoesDialogProps {
   open: boolean
@@ -40,10 +41,55 @@ export function ConfiguracoesDialog({
   setOpenAtLogin,
 }: ConfiguracoesDialogProps) {
   const temElectron = typeof window !== "undefined" && window.electron?.getOpenAtLogin
+  const temUpdater = typeof window !== "undefined" && typeof window.electron?.getAppVersion === "function"
+
+  const [appVersion, setAppVersion] = useState<string>("")
+  const [checking, setChecking] = useState(false)
+  const [updateAvailable, setUpdateAvailable] = useState<string | null>(null)
+  const [updateDownloaded, setUpdateDownloaded] = useState<string | null>(null)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+  const [updateNotAvailable, setUpdateNotAvailable] = useState(false)
+
+  useEffect(() => {
+    if (!temUpdater || !window.electron?.getAppVersion) return
+    window.electron?.getAppVersion?.().then((v: string) => setAppVersion(v))
+    window.electron.onUpdateAvailable?.((data: { version?: string }) => {
+      setUpdateAvailable(data?.version ?? null)
+      setUpdateError(null)
+      setUpdateNotAvailable(false)
+    })
+    window.electron.onUpdateNotAvailable?.(() => {
+      setChecking(false)
+      setUpdateNotAvailable(true)
+      setUpdateError(null)
+    })
+    window.electron.onUpdateDownloaded?.((data: { version?: string }) => {
+      setUpdateDownloaded(data?.version ?? null)
+      setChecking(false)
+    })
+    window.electron.onUpdateError?.((message: string) => {
+      setChecking(false)
+      setUpdateError(message ?? "Erro ao verificar atualização.")
+    })
+  }, [temUpdater])
 
   const handleSincronizar = () => {
     window.dispatchEvent(new CustomEvent("checkNewMusic"))
     onOpenChange(false)
+  }
+
+  const handleVerificarAtualizacao = () => {
+    if (!window.electron?.checkForUpdates) return
+    setChecking(true)
+    setUpdateError(null)
+    setUpdateNotAvailable(false)
+    setUpdateAvailable(null)
+    setUpdateDownloaded(null)
+    window.electron.checkForUpdates()
+  }
+
+  const handleReiniciarEInstalar = () => {
+    window.electron?.quitAndInstall?.()
   }
 
   return (
@@ -72,6 +118,52 @@ export function ConfiguracoesDialog({
                 checked={openAtLogin}
                 onCheckedChange={setOpenAtLogin}
               />
+            </div>
+          )}
+
+          {/* Atualizações (app empacotado com electron-updater) */}
+          {temUpdater && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <p className="text-base font-medium">Atualizações</p>
+              <p className="text-sm text-muted-foreground">
+                {appVersion ? `Versão atual: ${appVersion}` : "Versão do app (Electron)."}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleVerificarAtualizacao}
+                  disabled={checking}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-stone-800 text-white hover:bg-stone-700 disabled:opacity-60 transition-colors"
+                >
+                  {checking ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" aria-hidden />
+                  )}
+                  {checking ? "Verificando…" : "Verificar atualizações"}
+                </button>
+                {updateDownloaded && (
+                  <button
+                    type="button"
+                    onClick={handleReiniciarEInstalar}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-700 text-white hover:bg-emerald-600 transition-colors"
+                  >
+                    <Download className="h-4 w-4" aria-hidden />
+                    Reiniciar e instalar
+                  </button>
+                )}
+              </div>
+              {updateAvailable && !updateDownloaded && (
+                <p className="text-sm text-muted-foreground">
+                  Nova versão {updateAvailable} disponível. Baixando…
+                </p>
+              )}
+              {updateNotAvailable && (
+                <p className="text-sm text-muted-foreground">Você está na versão mais recente.</p>
+              )}
+              {updateError && (
+                <p className="text-sm text-destructive">{updateError}</p>
+              )}
             </div>
           )}
 

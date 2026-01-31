@@ -25,8 +25,23 @@ interface MusicaResult {
   arquivo: string
 }
 
-export function UnifiedSearch() {
-  const [query, setQuery] = useState("")
+export interface UnifiedSearchProps {
+  /** Quando informado, ao selecionar música chama isto em vez de navegar (ex.: tela de tocar = adicionar à fila). Pode receber info com titulo/artista para o toast. */
+  onSelectCodigo?: (codigo: string, info?: { titulo: string; artista?: string }) => void
+  /** Valor controlado (ex.: tela de tocar mostra o que está sendo digitado no teclado) */
+  value?: string
+  /** Chamado quando o valor do input muda (uso com value) */
+  onChange?: (value: string) => void
+}
+
+export function UnifiedSearch({ onSelectCodigo, value, onChange }: UnifiedSearchProps = {}) {
+  const [internalQuery, setInternalQuery] = useState("")
+  const query = value !== undefined ? value : internalQuery
+  const setQuery = (v: string | ((prev: string) => string)) => {
+    const next = typeof v === "function" ? v(query) : v
+    if (onChange) onChange(next)
+    if (value === undefined) setInternalQuery(next)
+  }
   const [resultados, setResultados] = useState<MusicaResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showResults, setShowResults] = useState(false)
@@ -101,26 +116,43 @@ export function UnifiedSearch() {
       e.preventDefault()
     }
 
-    // Se for código, buscar direto
+    // Se for código: adicionar à fila (se onSelectCodigo) ou ir para tocar
     if (isCode) {
       const codigo = query.replace(/\D/g, "")
-      router.push(`/tocar/${codigo}`)
       setQuery("")
+      if (onSelectCodigo) {
+        onSelectCodigo(codigo)
+      } else {
+        router.push(`/tocar/${codigo}`)
+      }
       return
     }
 
     // Se houver resultados, Enter inicia o selecionado (ou o primeiro)
     if (resultados.length > 0) {
       const idx = Math.min(selectedIndex, resultados.length - 1)
-      handleSelectMusica(resultados[idx].codigo)
+      const m = resultados[idx]
+      handleSelectMusica(m.codigo, { titulo: m.titulo, artista: m.artista })
     }
   }
 
-  const handleSelectMusica = (codigo: string) => {
+  const handleSelectMusica = (codigo: string, info?: { titulo: string; artista?: string }) => {
     setQuery("")
     setShowResults(false)
-    router.push(`/tocar/${codigo}`)
+    if (onSelectCodigo) {
+      onSelectCodigo(codigo, info)
+    } else {
+      router.push(`/tocar/${codigo}`)
+    }
   }
+
+  // Na tela de tocar: Enter na overlay dispara este evento; executar submit (escolher próxima música)
+  useEffect(() => {
+    if (!onSelectCodigo) return
+    const onSubmitEvent = () => handleSubmit()
+    window.addEventListener("tocar-search-submit", onSubmitEvent)
+    return () => window.removeEventListener("tocar-search-submit", onSubmitEvent)
+  }, [onSelectCodigo, query, isCode, resultados, selectedIndex])
 
   /** Só seleciona o índice (mostra dados na barra); Enter depois inicia */
   const handleSelectIndex = (index: number) => {

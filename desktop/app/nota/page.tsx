@@ -1,13 +1,16 @@
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useState, Suspense, useCallback } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import Lottie from 'lottie-react'
+import { useFilaProxima } from "@/contexts/fila-proxima"
 
 function NotaContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { removeFromFila } = useFilaProxima()
   const notaFinal = Number.parseInt(searchParams.get("nota") || "85")
+  const proximoCodigo = searchParams.get("proximo") ?? null
 
   const [showCelebration, setShowCelebration] = useState(true)
   const [showNota, setShowNota] = useState(false)
@@ -63,6 +66,16 @@ function NotaContent() {
     return () => clearInterval(interval)
   }, [showNota, notaFinal])
 
+  // Ao finalizar: ir para próxima música (se tiver na fila) ou para a tela inicial
+  const goAfterNota = useCallback(() => {
+    if (proximoCodigo) {
+      removeFromFila()
+      router.push(`/tocar/${proximoCodigo}`)
+    } else {
+      router.push("/")
+    }
+  }, [proximoCodigo, removeFromFila, router])
+
   // Countdown para voltar
   useEffect(() => {
     if (!showNota) return
@@ -71,7 +84,7 @@ function NotaContent() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer)
-          setTimeout(() => router.push("/"), 0)
+          setTimeout(() => goAfterNota(), 0)
           return 0
         }
         return prev - 1
@@ -79,19 +92,19 @@ function NotaContent() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [showNota, router])
+  }, [showNota, goAfterNota])
 
-  // Handler para tecla Enter
+  // Handler para tecla Enter (finalizar e ir para próxima ou home)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
-        router.push("/")
+        goAfterNota()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [router])
+  }, [goAfterNota])
 
   const getMessage = () => {
     if (notaFinal >= 90) return "🎉 INCRÍVEL!"
@@ -177,7 +190,12 @@ function NotaContent() {
             />
           </div>
           <p className="text-sm text-white/40">
-            Voltando em <span className="text-cyan-400">{countdown}s</span> • Pressione <span className="text-cyan-400">Enter</span>
+            {proximoCodigo ? (
+              <>Próxima música em <span className="text-cyan-400">{countdown}s</span></>
+            ) : (
+              <>Voltando em <span className="text-cyan-400">{countdown}s</span></>
+            )}
+            {" • "}Pressione <span className="text-cyan-400">Enter</span>
           </p>
         </div>
       </div>

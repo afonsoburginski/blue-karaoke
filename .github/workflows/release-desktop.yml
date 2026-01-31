@@ -1,0 +1,67 @@
+# Publica release do Blue Karaoke (desktop) no GitHub.
+#
+# Disparos:
+# 1) A cada push em main → nova release com versão 1.0.<run_number> (ex.: 1.0.42)
+# 2) Ao enviar uma tag v* → release com a versão da tag (ex.: v1.0.1 → 1.0.1)
+#
+# O workflow faz o build no Windows e publica a release com o instalador anexado.
+
+name: Release Desktop (Windows)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+
+      # Versão: se for tag v* usa a tag; senão (push em main) usa 1.0.<run_number>
+      - name: Definir versão
+        id: version
+        run: |
+          if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
+            $version = "${{ github.ref_name }}".TrimStart('v')
+          } else {
+            $version = "1.0.${{ github.run_number }}"
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "Versão: $version"
+
+      - name: Atualizar versão no package.json
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $pkgPath = "package.json"
+          (Get-Content $pkgPath) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content $pkgPath
+          Get-Content $pkgPath | Select-String "version"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build e publicar no GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run electron:build:win:publish
+
+      - name: Upload artefatos da release (opcional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlueKaraoke-Windows-${{ steps.version.outputs.version }}
+          path: desktop/release/*.exe

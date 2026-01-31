@@ -11,6 +11,7 @@ import { UnifiedSearch } from "@/components/unified-search"
 import { useAtivacao } from "@/hooks/use-ativacao"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ConfiguracoesDialog } from "@/components/configuracoes-dialog"
+import { QrCodesHome } from "@/components/qr-code"
 import { Calendar, Clock, AlertCircle, Ban, Download, Settings } from "lucide-react"
 
 export default function HomePage() {
@@ -268,7 +269,6 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen relative overflow-hidden bg-black">
-      {/* Imagem de fundo com blur */}
       <div 
         className="absolute inset-0 blur-sm scale-105"
         style={{
@@ -295,7 +295,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Barra de tarefas: atalhos em texto clicável */}
       <div className="absolute left-0 right-0 z-20 top-40 md:top-44 bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 flex flex-wrap items-center gap-4">
         <button
           type="button"
@@ -490,15 +489,7 @@ export default function HomePage() {
               )}
             </button>
           )}
-          <div className="rounded-2xl overflow-hidden shadow-lg border border-stone-300">
-            <Image
-              src="/qr-code.png"
-              alt="QR Code"
-              width={140}
-              height={140}
-              className="block"
-            />
-          </div>
+          <QrCodesHome />
         </div>
       </div>
 

@@ -1,7 +1,17 @@
 const { contextBridge, ipcRenderer } = require("electron")
 
+// Callbacks para eventos de atualização (um por tipo)
+let onUpdateAvailableCb = null
+let onUpdateNotAvailableCb = null
+let onUpdateDownloadedCb = null
+let onUpdateErrorCb = null
+
+ipcRenderer.on("update-available", (_event, data) => { if (onUpdateAvailableCb) onUpdateAvailableCb(data) })
+ipcRenderer.on("update-not-available", () => { if (onUpdateNotAvailableCb) onUpdateNotAvailableCb() })
+ipcRenderer.on("update-downloaded", (_event, data) => { if (onUpdateDownloadedCb) onUpdateDownloadedCb(data) })
+ipcRenderer.on("update-error", (_event, message) => { if (onUpdateErrorCb) onUpdateErrorCb(message) })
+
 // Expor APIs seguras para o renderer process
-// Nota: Não usamos os/path aqui porque não são necessários no sandbox
 contextBridge.exposeInMainWorld("electron", {
   platform: process.platform,
   versions: process.versions,
@@ -16,4 +26,19 @@ contextBridge.exposeInMainWorld("electron", {
   getOpenAtLogin: () => ipcRenderer.invoke("get-open-at-login"),
   /** Iniciar com Windows: definir (true/false). */
   setOpenAtLogin: (openAtLogin) => ipcRenderer.invoke("set-open-at-login", openAtLogin),
+  // Atualizações (só em app empacotado)
+  /** Versão atual do app. */
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
+  /** Verificar atualizações no GitHub. */
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  /** Registrar callback quando houver atualização disponível. */
+  onUpdateAvailable: (cb) => { onUpdateAvailableCb = cb },
+  /** Registrar callback quando não houver atualização. */
+  onUpdateNotAvailable: (cb) => { onUpdateNotAvailableCb = cb },
+  /** Registrar callback quando a atualização foi baixada (pronta para instalar). */
+  onUpdateDownloaded: (cb) => { onUpdateDownloadedCb = cb },
+  /** Registrar callback em erro de atualização. */
+  onUpdateError: (cb) => { onUpdateErrorCb = cb },
+  /** Fechar e instalar atualização. */
+  quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
 })

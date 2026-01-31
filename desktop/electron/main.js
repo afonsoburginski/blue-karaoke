@@ -1,10 +1,21 @@
-
 const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain } = require("electron")
 const path = require("path")
-const { spawn, fork } = require("child_process")
+const { spawn } = require("child_process")
 const fs = require("fs")
 const os = require("os")
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged
+
+// Auto-updater só em produção (app empacotado)
+let autoUpdater = null
+if (app.isPackaged) {
+  try {
+    autoUpdater = require("electron-updater").autoUpdater
+    autoUpdater.autoDownload = true
+    autoUpdater.autoInstallOnAppQuit = true
+  } catch (err) {
+    console.warn("electron-updater não disponível:", err.message)
+  }
+}
 
 // Configurar logs em arquivo
 let logPath
@@ -347,9 +358,41 @@ app.whenReady().then(async () => {
     return {}
   })
 
+  // Atualizações (versão e verificar/instalar)
+  ipcMain.handle("get-app-version", () => app.getVersion())
+  ipcMain.handle("check-for-updates", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return {}
+    if (!autoUpdater) {
+      mainWindow.webContents.send("update-not-available")
+      return {}
+    }
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error("Erro ao verificar atualizações:", err)
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("update-error", err.message)
+    })
+    return {}
+  })
+  ipcMain.handle("quit-and-install", () => {
+    if (autoUpdater) {
+      autoUpdater.quitAndInstall(false, true)
+    }
+    return {}
+  })
+
   try {
     await startNextServer()
     createWindow()
+
+    // Registrar eventos do auto-updater após a janela existir
+    if (autoUpdater && mainWindow && !mainWindow.isDestroyed()) {
+      const send = (channel, ...args) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args)
+      }
+      autoUpdater.on("update-available", (info) => send("update-available", { version: info.version }))
+      autoUpdater.on("update-not-available", () => send("update-not-available"))
+      autoUpdater.on("update-downloaded", (info) => send("update-downloaded", { version: info.version }))
+      autoUpdater.on("error", (err) => send("update-error", err.message))
+    }
   } catch (error) {
     console.error("Erro ao iniciar aplicação:", error)
     
