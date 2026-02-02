@@ -162,6 +162,13 @@ export default function HomePage() {
         return
       }
 
+      // * ou Multiply (numpad): sempre disparar sincronização de metadados quando ativado (mesmo com foco no input)
+      if (isActivatedOrJustActivated && (e.key === "*" || e.key === "Multiply" || e.code === "NumpadMultiply")) {
+        window.dispatchEvent(new CustomEvent("checkNewMusic"))
+        e.preventDefault()
+        return
+      }
+
       // Não bloquear se algum diálogo estiver aberto
       if (ativacaoDialogOpen || uploadDialogOpen || configDialogOpen || isInputElement) {
         return // Permitir entrada normal em inputs e diálogos
@@ -202,8 +209,8 @@ export default function HomePage() {
         setError(false)
         e.preventDefault()
       }
-      else if (e.key === "*") {
-        // Sincronizar apenas metadados
+      else if (e.key === "*" || e.key === "Multiply" || e.code === "NumpadMultiply") {
+        // Sincronizar apenas metadados (* no teclado ou numpad) — já tratado acima quando ativado
         window.dispatchEvent(new CustomEvent("checkNewMusic"))
         e.preventDefault()
       }
