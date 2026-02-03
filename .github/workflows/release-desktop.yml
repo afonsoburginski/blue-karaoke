@@ -12,13 +12,12 @@ name: Release Desktop (Windows + Linux)
 permissions:
   contents: write
 
+# Push em main = release 1.0.run_number. Tag v* = use outro workflow ou Run workflow manual.
 on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
-  workflow_dispatch:  # Permite rodar manualmente em Actions → Release Desktop → Run workflow
+  workflow_dispatch: {}
 
 jobs:
   build-windows:
@@ -41,7 +40,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: "Definir versão (1 commit = 1 release)"
+      - name: Set version
         id: version
         run: |
           if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
@@ -52,7 +51,7 @@ jobs:
           echo "version=$version" >> $env:GITHUB_OUTPUT
           echo "Versão: $version"
 
-      - name: Atualizar versão no package.json (para o instalador ter a versão correta)
+      - name: Update package.json version
         run: |
           $version = "${{ steps.version.outputs.version }}"
           $pkgPath = "package.json"
@@ -97,7 +96,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Definir versão (1 commit = 1 release, push main ou tag v*)
+      - name: Set version
         id: version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
@@ -108,7 +107,7 @@ jobs:
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "Versão: $version"
 
-      - name: Atualizar versão no package.json (para o instalador ter a versão correta)
+      - name: Update package.json version
         run: |
           version="${{ steps.version.outputs.version }}"
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$version\"/" package.json
@@ -141,7 +140,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Definir versão e tag
+      - name: Set version and tag
         id: version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
