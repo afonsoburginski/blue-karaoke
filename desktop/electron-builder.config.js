@@ -2,6 +2,7 @@ module.exports = {
   appId: "com.bluekaraoke.app",
   productName: "Blue Karaoke",
   executableName: "BlueKaraoke",
+  icon: "build/icon.ico",
   publish: {
     provider: "github",
     owner: process.env.GH_OWNER || "afonsoburginski",
@@ -45,7 +46,7 @@ module.exports = {
   asar: false, // Desabilitar ASAR para evitar problemas com better-sqlite3
   win: {
     target: "nsis",
-    icon: "public/icon.ico",
+    icon: "build/icon.ico",
     signAndEditExecutable: false,
   },
   nsis: {
@@ -55,9 +56,11 @@ module.exports = {
     createDesktopShortcut: "always",
     createStartMenuShortcut: true,
     installerLanguages: ["pt_BR", "en"],
-    installerIcon: "public/icon.ico",
-    uninstallerIcon: "public/icon.ico",
-    installerHeaderIcon: "public/icon.ico",
+    installerIcon: "build/icon.ico",
+    uninstallerIcon: "build/icon.ico",
+    installerHeaderIcon: "build/icon.ico",
+    include: "build/uninstaller.nsh",
+    deleteAppDataOnUninstall: true,
   },
   forceCodeSigning: false,
   linux: {
