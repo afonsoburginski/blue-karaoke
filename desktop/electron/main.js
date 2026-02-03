@@ -16,7 +16,6 @@ if (app.isPackaged) {
   }
 }
 
-// Configurar logs em arquivo (pasta do app: userData/logs/)
 let logPath = path.join(os.tmpdir(), "blue-karaoke.log")
 let logStream = fs.createWriteStream(logPath, { flags: "a" })
 let logsDir = null 
