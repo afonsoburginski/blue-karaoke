@@ -41,7 +41,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Definir versão (1 commit = 1 release: push main → 1.0.run_number; tag v* → versão da tag)
+      - name: "Definir versão (1 commit = 1 release)"
         id: version
         run: |
           if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
@@ -97,7 +97,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Definir versão (1 commit = 1 release: push main → 1.0.run_number; tag v* → versão da tag)
+      - name: Definir versão (1 commit = 1 release, push main ou tag v*)
         id: version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
@@ -141,7 +141,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Definir versão e tag (mesma lógica: tag → versão da tag; push/main → 1.0.run_number)
+      - name: Definir versão e tag
         id: version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
