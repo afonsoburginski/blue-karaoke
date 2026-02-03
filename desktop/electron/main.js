@@ -11,6 +11,14 @@ if (app.isPackaged) {
     autoUpdater = require("electron-updater").autoUpdater
     autoUpdater.autoDownload = true
     autoUpdater.autoInstallOnAppQuit = true
+    autoUpdater.allowPrerelease = true
+    // Garantir que o feed aponta para o repo correto (evita app não achar release)
+    autoUpdater.setFeedURL({
+      provider: "github",
+      owner: "afonsoburginski",
+      repo: "blue-karaoke",
+      vPrefixedTagName: true,
+    })
   } catch (err) {
     console.warn("electron-updater não disponível:", err.message)
   }
@@ -437,8 +445,14 @@ app.whenReady().then(async () => {
       mainWindow.webContents.send("update-not-available")
       return {}
     }
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.error("Erro ao verificar atualizações:", err)
+    const currentVersion = app.getVersion()
+    log("Verificando atualizações. Versão atual:", currentVersion)
+    autoUpdater.checkForUpdates().then((result) => {
+      if (result?.updateInfo?.version) {
+        log("Update check: versão remota encontrada:", result.updateInfo.version)
+      }
+    }).catch((err) => {
+      log("Erro ao verificar atualizações:", err.message)
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("update-error", err.message)
     })
     return {}
@@ -459,8 +473,14 @@ app.whenReady().then(async () => {
       const send = (channel, ...args) => {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args)
       }
-      autoUpdater.on("update-available", (info) => send("update-available", { version: info.version }))
-      autoUpdater.on("update-not-available", () => send("update-not-available"))
+      autoUpdater.on("update-available", (info) => {
+        log("Atualização disponível:", info.version)
+        send("update-available", { version: info.version })
+      })
+      autoUpdater.on("update-not-available", () => {
+        log("Update check: nenhuma atualização (versão atual:", app.getVersion(), ")")
+        send("update-not-available")
+      })
       autoUpdater.on("update-downloaded", (info) => send("update-downloaded", { version: info.version }))
       autoUpdater.on("error", (err) => send("update-error", err.message))
     }
