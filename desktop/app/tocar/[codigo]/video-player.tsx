@@ -187,15 +187,16 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
         }
         return
       }
-      // C = tocar música aleatória
+      // C = tocar música aleatória (só baixadas)
       if (e.key === "c" || e.key === "C") {
         e.preventDefault()
         fetch("/api/musicas/aleatoria")
           .then((r) => r.json())
           .then((data: { codigo: string | null }) => {
             if (data.codigo) router.push(`/tocar/${data.codigo}`)
+            else toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
           })
-          .catch(() => {})
+          .catch(() => toast.error("Erro ao buscar música aleatória."))
         return
       }
       // P = pausar/retomar (só <video>)
@@ -331,8 +332,9 @@ export default function VideoPlayer({ musica }: { musica: Musica }) {
                 .then((r) => r.json())
                 .then((data: { codigo: string | null }) => {
                   if (data.codigo) router.push(`/tocar/${data.codigo}`)
+                  else toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
                 })
-                .catch(() => {})
+                .catch(() => toast.error("Erro ao buscar música aleatória."))
             }}
             className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
             title="Tocar música aleatória (C)"

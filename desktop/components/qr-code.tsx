@@ -48,7 +48,7 @@ const INSTAGRAM_URL = "https://www.instagram.com/bluekaraokesinop?igsh=MWJjamM4Y
 
 export function QrCodesHome() {
   return (
-    <div className="flex flex-col items-end gap-2">
+    <div className="flex flex-row items-center gap-3">
       <QrCode value={CATALOGO_URL} label="Catálogo" />
       <QrCode value={INSTAGRAM_URL} label="Instagram" />
     </div>

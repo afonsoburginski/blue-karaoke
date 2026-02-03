@@ -13,12 +13,11 @@ export interface Musica {
 }
 
 /**
- * Busca música por código (primeiro no local, depois no remoto)
+ * Busca música por código apenas no banco local (só músicas já baixadas).
+ * Não usa Supabase para evitar tentar tocar música sem arquivo.
  */
 export async function getMusicaByCodigo(codigo: string): Promise<Musica | null> {
-  // Garantir que o banco local está inicializado
   await ensureLocalDbInitialized()
-  // Tentar buscar no banco local primeiro
   const localResult = await localDb
     .select()
     .from(musicasLocal)
@@ -34,44 +33,6 @@ export async function getMusicaByCodigo(codigo: string): Promise<Musica | null> 
       arquivo: musica.arquivo,
     }
   }
-
-  // Se não encontrou localmente, tentar no Supabase
-  try {
-    const remoteResult = await db
-      .select()
-      .from(musicas)
-      .where(eq(musicas.codigo, codigo))
-      .limit(1)
-
-    if (remoteResult.length > 0) {
-      const musica = remoteResult[0]
-      // Salvar localmente para cache
-      await localDb.insert(musicasLocal).values({
-        id: musica.id,
-        codigo: musica.codigo,
-        artista: musica.artista,
-        titulo: musica.titulo,
-        arquivo: musica.arquivo,
-        nomeArquivo: musica.nomeArquivo || null,
-        tamanho: musica.tamanho || null,
-        duracao: musica.duracao || null,
-        userId: musica.userId || null,
-        syncedAt: Date.now(), // Já está no remoto
-        createdAt: musica.createdAt.getTime(),
-        updatedAt: musica.updatedAt.getTime(),
-      }).onConflictDoNothing()
-
-      return {
-        codigo: musica.codigo,
-        artista: musica.artista,
-        titulo: musica.titulo,
-        arquivo: musica.arquivo,
-      }
-    }
-  } catch (error) {
-    console.error("Erro ao buscar música no remoto:", error)
-  }
-
   return null
 }
 

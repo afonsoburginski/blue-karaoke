@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Spotlight } from "@/components/ui/spotlight-new"
 import { useAutoSync } from "@/hooks/useAutoSync"
@@ -28,6 +28,7 @@ export default function HomePage() {
     return localStorage.getItem("blue-karaoke-download-blocked") === "1"
   })
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { status: ativacaoStatus, verificar: verificarAtivacao } = useAtivacao()
   const acabouDeAtivarRef = useRef(false)
   const [justActivated, setJustActivated] = useState(false)
@@ -87,6 +88,14 @@ export default function HomePage() {
       setJustActivated(false)
     }
   }, [ativacaoStatus.ativada, ativacaoStatus.expirada, justActivated])
+
+  // Toast quando voltar da página de tocar com música não encontrada (404)
+  useEffect(() => {
+    if (searchParams.get("notfound") === "1") {
+      toast.info("Música não encontrada ou ainda não baixada. Pressione * para sincronizar.")
+      router.replace("/", { scroll: false })
+    }
+  }, [searchParams, router])
 
   // Verificar ativação ao carregar — não reabrir logo após ativação bem-sucedida
   useEffect(() => {
@@ -224,15 +233,19 @@ export default function HomePage() {
         router.push("/")
         e.preventDefault()
       }
-      // C = tocar música aleatória
+      // C = tocar música aleatória (só entre as baixadas)
       else if (e.key === "c" || e.key === "C") {
         e.preventDefault()
         fetch("/api/musicas/aleatoria")
           .then((r) => r.json())
           .then((data: { codigo: string | null }) => {
-            if (data.codigo) router.push(`/tocar/${data.codigo}`)
+            if (data.codigo) {
+              router.push(`/tocar/${data.codigo}`)
+            } else {
+              toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
+            }
           })
-          .catch(() => {})
+          .catch(() => toast.error("Erro ao buscar música aleatória."))
       }
       else {
         e.preventDefault()

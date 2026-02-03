@@ -40,12 +40,12 @@ export default function TocarPage({
         if (data.exists && data.musica) {
           setMusica(data.musica)
         } else {
-          router.push("/")
+          router.replace("/?notfound=1")
           return
         }
       } catch (error) {
         console.error("[TocarPage] Erro ao buscar música:", error)
-        router.push("/")
+        router.replace("/?notfound=1")
         return
       } finally {
         setIsLoading(false)
