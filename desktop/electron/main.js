@@ -5,7 +5,6 @@ const fs = require("fs")
 const os = require("os")
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged
 
-// Auto-updater só em produção (app empacotado)
 let autoUpdater = null
 if (app.isPackaged) {
   try {
