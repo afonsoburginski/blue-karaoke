@@ -23,6 +23,23 @@ interface ConfiguracoesDialogProps {
   setOpenAtLogin?: (value: boolean) => void
 }
 
+const GITHUB_RELEASES_API = "https://api.github.com/repos/afonsoburginski/blue-karaoke/releases/latest"
+const GITHUB_RELEASES_PAGE = "https://github.com/afonsoburginski/blue-karaoke/releases"
+
+/** Compara versões "1.0.34" e "1.0.35"; retorna true se latest > current */
+function isNewerVersion(latest: string, current: string): boolean {
+  const toParts = (v: string) => v.replace(/^v/, "").split(".").map(Number)
+  const a = toParts(latest)
+  const b = toParts(current)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x > y) return true
+    if (x < y) return false
+  }
+  return false
+}
+
 const comandosTelaInicial = [
   { tecla: "F12", acao: "Abrir configurações" },
   { tecla: "Esc", acao: "Fechar programa (Electron)" },
@@ -64,6 +81,8 @@ export function ConfiguracoesDialog({
   const [updateDownloaded, setUpdateDownloaded] = useState<string | null>(null)
   const [updateError, setUpdateError] = useState<string | null>(null)
   const [updateNotAvailable, setUpdateNotAvailable] = useState(false)
+  /** Fallback: versão mais nova encontrada pela API do GitHub (quando electron-updater não acha) */
+  const [updateFromApi, setUpdateFromApi] = useState<{ version: string; url: string } | null>(null)
 
   useEffect(() => {
     if (temLogPath && window.electron?.getLogPath) {
@@ -100,13 +119,37 @@ export function ConfiguracoesDialog({
   }
 
   const handleVerificarAtualizacao = () => {
-    if (!window.electron?.checkForUpdates) return
+    if (!temUpdater) return
     setChecking(true)
     setUpdateError(null)
     setUpdateNotAvailable(false)
     setUpdateAvailable(null)
     setUpdateDownloaded(null)
-    window.electron.checkForUpdates()
+    setUpdateFromApi(null)
+
+    if (window.electron?.checkForUpdates) {
+      window.electron.checkForUpdates()
+    }
+
+    // Fallback: consultar API do GitHub; se houver versão mais nova, mostrar link para baixar
+    const currentVer = appVersion
+    if (!currentVer) return setChecking(false)
+    fetch(GITHUB_RELEASES_API, {
+      headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { tag_name?: string; html_url?: string } | null) => {
+        if (!data?.tag_name || !currentVer) return
+        const latestVer = data.tag_name.replace(/^v/, "")
+        if (isNewerVersion(latestVer, currentVer)) {
+          setUpdateFromApi({
+            version: latestVer,
+            url: data.html_url || GITHUB_RELEASES_PAGE,
+          })
+        }
+      })
+      .catch(() => {})
+      .finally(() => setChecking(false))
   }
 
   const handleReiniciarEInstalar = () => {
@@ -115,7 +158,7 @@ export function ConfiguracoesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Configurações</DialogTitle>
           <DialogDescription>
@@ -179,7 +222,23 @@ export function ConfiguracoesDialog({
                   Nova versão {updateAvailable} disponível. Baixando…
                 </p>
               )}
-              {updateNotAvailable && (
+              {updateFromApi && (
+                <div className="space-y-2 rounded-lg bg-emerald-950/40 border border-emerald-800/50 p-3">
+                  <p className="text-sm font-medium text-emerald-200">
+                    Nova versão {updateFromApi.version} disponível
+                  </p>
+                  <a
+                    href={updateFromApi.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-emerald-400 hover:underline"
+                  >
+                    <Download className="h-4 w-4" aria-hidden />
+                    Baixar no GitHub
+                  </a>
+                </div>
+              )}
+              {updateNotAvailable && !updateFromApi && (
                 <p className="text-sm text-muted-foreground">Você está na versão mais recente.</p>
               )}
               {updateError && (
