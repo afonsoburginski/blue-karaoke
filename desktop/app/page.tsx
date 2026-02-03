@@ -490,3 +490,11 @@ function HomePageContent() {
     </main>
   )
 }
+
+export default function Page() {
+  return (
+    <Suspense fallback={<HomePageFallback />}>
+      <HomePageContent />
+    </Suspense>
+  )
+}
