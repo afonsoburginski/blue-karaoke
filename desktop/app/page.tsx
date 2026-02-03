@@ -5,24 +5,24 @@ import { useRouter } from 'next/navigation'
 import Image from "next/image"
 import { Spotlight } from "@/components/ui/spotlight-new"
 import { useAutoSync } from "@/hooks/useAutoSync"
-import { UploadDialog } from "@/components/upload-dialog"
 import { AtivacaoDialog } from "@/components/ativacao-dialog"
 import { UnifiedSearch } from "@/components/unified-search"
 import { useAtivacao } from "@/hooks/use-ativacao"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ConfiguracoesDialog } from "@/components/configuracoes-dialog"
 import { QrCodesHome } from "@/components/qr-code"
+import { toast } from "sonner"
 import { Calendar, Clock, AlertCircle, Ban, Download, Settings } from "lucide-react"
 
 export default function HomePage() {
   const [codigo, setCodigo] = useState("")
   const [error, setError] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [ativacaoDialogOpen, setAtivacaoDialogOpen] = useState(false)
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [openAtLogin, setOpenAtLoginState] = useState(false)
   const [isElectron, setIsElectron] = useState(false)
+  // Impedir download: default permitido; lê localStorage para persistir a escolha
   const [blockDownloads, setBlockDownloads] = useState(() => {
     if (typeof window === "undefined") return false
     return localStorage.getItem("blue-karaoke-download-blocked") === "1"
@@ -32,7 +32,6 @@ export default function HomePage() {
   const acabouDeAtivarRef = useRef(false)
   const [justActivated, setJustActivated] = useState(false)
 
-  // Verifica se está ativado para permitir downloads
   const isActivated = ativacaoStatus.ativada && !ativacaoStatus.expirada
   const isActivatedOrJustActivated = isActivated || justActivated
 
@@ -45,22 +44,28 @@ export default function HomePage() {
       return next
     })
   }, [])
-  
-  // Sincronização para download offline (respeita "impedir download")
+
+  // Sincronização para download offline
   const { 
     downloadMetadata, 
     downloadAllForOffline, 
+    startBackgroundDownload,
     offline, 
     isDownloading, 
-    isOnline,
     message: syncMessage 
   } = useAutoSync({ intervalMinutes: 30, isActivated, blockDownloads })
 
-  // Listener para atalho de sincronização (tecla *)
+  // Listener para atalho de sincronização (tecla *) — metadados + início do download dos arquivos
   useEffect(() => {
-    const handleCheckNewMusic = () => {
-      console.log("Iniciando sincronização de metadados via atalho...")
-      downloadMetadata()
+    const handleCheckNewMusic = async () => {
+      if (!isActivated && !justActivated) return
+      if (blockDownloads) {
+        toast.info("Downloads estão bloqueados. Ative em \"Permitir download\" para baixar.")
+        return
+      }
+      toast.info("Baixando músicas… (tecla *)")
+      await downloadMetadata()
+      startBackgroundDownload()
     }
 
     const handleDownloadAll = () => {
@@ -74,7 +79,7 @@ export default function HomePage() {
       window.removeEventListener("checkNewMusic", handleCheckNewMusic)
       window.removeEventListener("downloadAllOffline", handleDownloadAll)
     }
-  }, [downloadMetadata, downloadAllForOffline])
+  }, [downloadMetadata, downloadAllForOffline, startBackgroundDownload, isActivated, justActivated, blockDownloads])
 
   // Limpar "justActivated" quando o status real ficar ativado
   useEffect(() => {
@@ -170,7 +175,7 @@ export default function HomePage() {
       }
 
       // Não bloquear se algum diálogo estiver aberto
-      if (ativacaoDialogOpen || uploadDialogOpen || configDialogOpen || isInputElement) {
+      if (ativacaoDialogOpen || configDialogOpen || isInputElement) {
         return // Permitir entrada normal em inputs e diálogos
       }
 
@@ -219,10 +224,6 @@ export default function HomePage() {
         router.push("/")
         e.preventDefault()
       }
-      else if (e.key === "/") {
-        setUploadDialogOpen(true)
-        e.preventDefault()
-      }
       // C = tocar música aleatória
       else if (e.key === "c" || e.key === "C") {
         e.preventDefault()
@@ -240,7 +241,7 @@ export default function HomePage() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [codigo, error, isLoading, handleSubmit, isActivatedOrJustActivated, ativacaoDialogOpen, uploadDialogOpen, configDialogOpen, router])
+  }, [codigo, error, isLoading, handleSubmit, isActivatedOrJustActivated, ativacaoDialogOpen, configDialogOpen, router])
 
   // Electron: detectar ambiente e carregar "Iniciar com Windows"
   useEffect(() => {
@@ -312,54 +313,65 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="absolute left-1/2 -translate-x-1/2 z-20 top-40 md:top-44 w-max bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 flex flex-wrap items-center gap-4 rounded-lg">
-        <button
-          type="button"
-          onClick={() => setConfigDialogOpen(true)}
-          className="inline-flex items-center gap-2 text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-          title="Configurações (F12)"
-        >
-          <Settings className="h-5 w-5 opacity-70" aria-hidden />
-          Configurações (F12)
-        </button>
-        <span className="text-stone-400 select-none">·</span>
-        {isElectron && (
-          <>
-            <button
-              type="button"
-              onClick={() => window.electron?.quit?.()}
-              className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-              title="Fechar Programa (ESC)"
-            >
-              Fechar Programa (ESC)
-            </button>
-            <span className="text-stone-400 select-none">·</span>
-            <button
-              type="button"
-              onClick={() => window.electron?.minimize?.()}
-              className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-              title="Minimizar Programa (Espaço)"
-            >
-              Minimizar Programa (Espaço)
-            </button>
-            <span className="text-stone-400 select-none">·</span>
-          </>
+      {/* Canto superior direito: configurações + componentes de download */}
+      <div className="absolute right-8 z-20 top-16 flex flex-col items-end gap-3">
+        <div className="w-max bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setConfigDialogOpen(true)}
+            className="inline-flex items-center gap-2 text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
+            title="Configurações (F12)"
+          >
+            <Settings className="h-5 w-5 opacity-70" aria-hidden />
+            Configurações (F12)
+          </button>
+        </div>
+        {isActivatedOrJustActivated && (
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white border-2 border-stone-300 text-stone-800 shadow-sm">
+              <span className="text-stone-700 text-xl font-medium">
+                🎵 {offline.musicasOffline} de {offline.totalMusicas ?? (offline.musicasOffline + (offline.musicasOnline || 0))} músicas
+              </span>
+              {(syncMessage || isDownloading) && (
+                <>
+                  <span className="text-stone-400">|</span>
+                  <div className="flex items-center gap-2">
+                    {isDownloading && (
+                      <div className="w-5 h-5 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    )}
+                    <span className="text-cyan-700 text-xl font-medium">
+                      {isDownloading ? "Baixando…" : (syncMessage || "Sincronizando…")}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+            {isActivated && (
+              <button
+                type="button"
+                onClick={toggleBlockDownloads}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xl font-medium transition-colors ${
+                  blockDownloads
+                    ? "bg-amber-100 text-amber-900 border border-amber-500 hover:bg-amber-200"
+                    : "bg-stone-200 text-stone-900 border border-stone-400 hover:bg-stone-300"
+                }`}
+                title={blockDownloads ? "Permitir novos downloads" : "Impedir novos downloads"}
+              >
+                {blockDownloads ? (
+                  <>
+                    <Download className="h-5 w-5" aria-hidden />
+                    Permitir download
+                  </>
+                ) : (
+                  <>
+                    <Ban className="h-5 w-5" aria-hidden />
+                    Impedir download
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            fetch("/api/musicas/aleatoria")
-              .then((r) => r.json())
-              .then((data: { codigo: string | null }) => {
-                if (data.codigo) router.push(`/tocar/${data.codigo}`)
-              })
-              .catch(() => {})
-          }}
-          className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-          title="Tocar música aleatória (C)"
-        >
-          Tocar música aleatória (C)
-        </button>
       </div>
 
       {/* Status de Ativação no canto superior direito */}
@@ -383,11 +395,11 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Barra inferior: busca + status + QR */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 min-h-72 bg-stone-100/90 backdrop-blur-sm flex items-center justify-between pl-0 pr-8 py-6 gap-8">
+      {/* Barra inferior: busca + status (sem fundo) */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 min-h-72 flex items-center justify-between pl-0 pr-8 py-6 gap-8">
         {/* Esquerda: título, busca e instruções (input no start, sem espaço lateral) */}
         <div className="min-w-0 max-w-3xl space-y-4 flex-1 flex flex-col items-start pl-8">
-          <h1 className="text-3xl md:text-4xl text-stone-900 font-semibold tracking-wide">
+          <h1 className="text-3xl md:text-4xl text-white font-semibold tracking-wide">
             Busque por código, nome ou artista
           </h1>
 
@@ -423,9 +435,10 @@ export default function HomePage() {
           )}
 
           {isActivatedOrJustActivated && (
-            <div className="space-y-0.5 text-stone-700 text-2xl">
-              <p>Digite o <span className="font-semibold text-stone-900">código</span> ou <span className="font-semibold text-stone-900">nome da música</span></p>
-              <p className="text-stone-600">Pressione <span className="font-medium text-stone-800">Enter</span> ou clique no resultado</p>
+            <div className="space-y-0.5 text-white text-2xl">
+              <p>Digite o <span className="font-semibold text-white">código</span> ou <span className="font-semibold text-white">nome da música</span></p>
+              <p className="text-white/90">Pressione <span className="font-medium text-white">Enter</span> ou clique no resultado</p>
+              <p className="text-white/90">Pressione <span className="font-medium text-white">*</span> (asterisco) para <span className="font-medium text-white">baixar/sincronizar músicas</span></p>
             </div>
           )}
         </div>
@@ -434,69 +447,13 @@ export default function HomePage() {
         {isActivatedOrJustActivated && (
           <div id="search-selected-center" className="flex-1 min-w-0 flex items-center justify-center px-4" />
         )}
-
-        {/* Direita: status, download e QR (fixo no canto, como antes) */}
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          {(syncMessage || isDownloading) ? (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white border-2 border-stone-300 text-stone-800 shadow-sm">
-              {isDownloading && (
-                <div className="w-5 h-5 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin" />
-              )}
-              <span className="text-xl text-stone-900">
-                {isDownloading
-                  ? `Baixando... (${offline.musicasOffline} de ${offline.totalMusicas || offline.musicasOffline + offline.musicasOnline || 0} músicas)`
-                  : (syncMessage || "Sincronizando...")}
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white border-2 border-stone-300 text-stone-800 shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"} animate-pulse`} />
-                <span className={`text-xl font-medium ${isOnline ? "text-green-800" : "text-red-800"}`}>
-                  {isOnline ? "Online" : "Offline"}
-                </span>
-              </div>
-              {offline.musicasOffline > 0 && (
-                <>
-                  <span className="text-stone-400">|</span>
-                  <span className="text-stone-600 text-xl">🎵 {offline.musicasOffline} músicas</span>
-                </>
-              )}
-            </div>
-          )}
-          {isActivated && (
-            <button
-              type="button"
-              onClick={toggleBlockDownloads}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xl font-medium transition-colors ${
-                blockDownloads
-                  ? "bg-amber-100 text-amber-900 border border-amber-500 hover:bg-amber-200"
-                  : "bg-stone-200 text-stone-900 border border-stone-400 hover:bg-stone-300"
-              }`}
-              title={blockDownloads ? "Permitir novos downloads" : "Impedir novos downloads"}
-            >
-              {blockDownloads ? (
-                <>
-                  <Download className="h-5 w-5" aria-hidden />
-                  Permitir download
-                </>
-              ) : (
-                <>
-                  <Ban className="h-5 w-5" aria-hidden />
-                  Impedir download
-                </>
-              )}
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* QR codes à direita da página, fora da barra branca (um acima do outro) */}
-      <div className="absolute right-8 bottom-80 z-20">
+      {/* QR codes no canto inferior direito */}
+      <div className="absolute right-8 bottom-8 z-20">
         <QrCodesHome />
       </div>
 
-      <UploadDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} />
       <AtivacaoDialog
         open={ativacaoDialogOpen}
         onOpenChange={setAtivacaoDialogOpen}

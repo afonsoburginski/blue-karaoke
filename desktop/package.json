@@ -1,6 +1,6 @@
 {
   "name": "blue-karaoke",
-  "version": "1.0.0",
+  "version": "1.0.16",
   "description": "Sistema de Karaokê Blue Karaoke - Reprodução de músicas para karaokê",
   "author": "Blue Karaoke <contato@bluekaraokes.com.br>",
   "private": true,
@@ -20,6 +20,7 @@
     "db:init-local": "tsx scripts/init-local-db.ts",
     "db:delete": "tsx scripts/delete-musica.ts",
     "db:delete-all": "tsx scripts/delete-all.ts",
+    "db:zerar": "cross-env NODE_ENV=development npx tsx scripts/zerar-local-db.ts",
     "electron:dev": "concurrently \"cross-env NODE_ENV=development next dev --webpack\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
     "electron:start": "concurrently \"cross-env NODE_ENV=development next dev --webpack\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
     "electron:build": "next build --webpack && electron-builder",

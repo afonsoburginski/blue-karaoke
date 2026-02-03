@@ -34,6 +34,11 @@ interface UseAutoSyncOptions {
 export function useAutoSync(options: UseAutoSyncOptions = {}) {
   const { intervalMinutes = 30, isActivated = false, blockDownloads = false } = options
   
+  const blockDownloadsRef = useRef(blockDownloads)
+  blockDownloadsRef.current = blockDownloads
+  
+  const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  
   const [status, setStatus] = useState<SyncStatus>({
     isOnline: typeof navigator !== "undefined" ? navigator.onLine : false,
     isSyncing: false,
@@ -72,7 +77,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
 
   // Baixar metadados das músicas
   const downloadMetadata = useCallback(async () => {
-    if (!isActivated || blockDownloads) return
+    if (!isActivated || blockDownloadsRef.current) return
     setStatus((prev) => ({ ...prev, isSyncing: true, error: null }))
 
     try {
@@ -107,11 +112,11 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
         error: errorMessage,
       }))
     }
-  }, [isActivated, blockDownloads, checkOfflineStatus])
+  }, [isActivated, checkOfflineStatus])
 
   // Baixar todas as músicas para offline
   const downloadAllForOffline = useCallback(async () => {
-    if (!isActivated || blockDownloads) return
+    if (!isActivated || blockDownloadsRef.current) return
     setStatus((prev) => ({ 
       ...prev, 
       isDownloading: true, 
@@ -153,34 +158,56 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
         downloadProgress: null,
       }))
     }
-  }, [isActivated, blockDownloads, checkOfflineStatus])
+  }, [isActivated, checkOfflineStatus])
 
-  // Baixar músicas em lote (background)
+  // Baixar músicas em lote (background) — ref para impedir respeitar mesmo nos timeouts
   const downloadBatch = useCallback(async () => {
-    if (!isActivated || blockDownloads) return
+    if (!isActivated || blockDownloadsRef.current) {
+      setStatus((prev) => ({ ...prev, isDownloading: false }))
+      return
+    }
     if (status.isDownloading || status.isSyncing) return
+
+    setStatus((prev) => ({ ...prev, isDownloading: true }))
 
     try {
       const response = await fetch("/api/sync?action=download-batch&size=3", {
         method: "POST",
       })
 
-      if (!response.ok) return
+      if (!response.ok) {
+        setStatus((prev) => ({ ...prev, isDownloading: false }))
+        return
+      }
 
       const data = await response.json()
       console.log(`[AutoSync] Lote: ${data.downloaded} baixados, ${data.remaining} restantes`)
 
-      // Atualizar status
       await checkOfflineStatus()
 
-      // Se ainda há músicas para baixar, agendar próximo lote
-      if (data.remaining > 0) {
-        setTimeout(() => downloadBatch(), 5000) // 5 segundos entre lotes
+      if (data.remaining > 0 && !blockDownloadsRef.current) {
+        batchTimeoutRef.current = setTimeout(() => {
+          batchTimeoutRef.current = null
+          downloadBatch()
+        }, 5000)
+      } else {
+        setStatus((prev) => ({ ...prev, isDownloading: false }))
       }
     } catch (error) {
       console.error("[AutoSync] Erro no download em lote:", error)
+      setStatus((prev) => ({ ...prev, isDownloading: false }))
     }
-  }, [isActivated, blockDownloads, status.isDownloading, status.isSyncing, checkOfflineStatus])
+  }, [isActivated, status.isDownloading, status.isSyncing, checkOfflineStatus])
+  
+  // Ao impedir download: cancela próximo lote e para o estado "baixando"
+  useEffect(() => {
+    if (!blockDownloads) return
+    if (batchTimeoutRef.current) {
+      clearTimeout(batchTimeoutRef.current)
+      batchTimeoutRef.current = null
+    }
+    setStatus((prev) => ({ ...prev, isDownloading: false }))
+  }, [blockDownloads])
 
   // Iniciar download em background automaticamente
   const startBackgroundDownload = useCallback(() => {

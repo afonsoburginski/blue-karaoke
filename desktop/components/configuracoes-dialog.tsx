@@ -23,17 +23,28 @@ interface ConfiguracoesDialogProps {
   setOpenAtLogin?: (value: boolean) => void
 }
 
-const comandos = [
-  { tecla: "F12", acao: "Abrir configurações (padrão do app)" },
-  { tecla: "Esc", acao: "Fechar programa" },
-  { tecla: "Espaço", acao: "Minimizar programa" },
+const comandosTelaInicial = [
+  { tecla: "F12", acao: "Abrir configurações" },
+  { tecla: "Esc", acao: "Fechar programa (Electron)" },
+  { tecla: "*", acao: "Baixar / sincronizar músicas (metadados + arquivos)" },
+  { tecla: "0–9", acao: "Digitar código da música" },
+  { tecla: "Enter", acao: "Tocar música (quando código com 5 dígitos)" },
+  { tecla: "Backspace", acao: "Apagar um dígito do código" },
+  { tecla: "Delete", acao: "Cancelar e limpar o código" },
+  { tecla: "+", acao: "Voltar à tela inicial" },
   { tecla: "C", acao: "Tocar música aleatória" },
-  { tecla: "P", acao: "Pausar / retomar música (durante reprodução)" },
-  { tecla: "+", acao: "Reiniciar música atual ou voltar à tela inicial" },
-  { tecla: "Delete", acao: "Cancelar (limpar código / sair da música)" },
-  { tecla: "Enter", acao: "Tocar (quando 5 dígitos) / Finalizar (segurar na reprodução)" },
-  { tecla: "Backspace", acao: "Limpar um dígito" },
-  { tecla: "0–9 durante a música", acao: "Digitar código para adicionar à fila “próxima”" },
+]
+
+const comandosReproducao = [
+  { tecla: "F12", acao: "Abrir configurações" },
+  { tecla: "Esc", acao: "Fechar programa (Electron)" },
+  { tecla: "Delete", acao: "Sair da música e voltar à tela inicial" },
+  { tecla: "+", acao: "Reiniciar música atual (voltar ao início)" },
+  { tecla: "P", acao: "Pausar / retomar reprodução" },
+  { tecla: "C", acao: "Tocar música aleatória" },
+  { tecla: "Enter", acao: "Segurar para finalizar e voltar (ou confirmar busca)" },
+  { tecla: "Backspace", acao: "Apagar caractere na busca" },
+  { tecla: "0–9 e letras", acao: "Digitar na busca ou código para adicionar à fila “próxima”" },
 ]
 
 export function ConfiguracoesDialog({
@@ -96,7 +107,7 @@ export function ConfiguracoesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Configurações</DialogTitle>
           <DialogDescription>
@@ -185,22 +196,36 @@ export function ConfiguracoesDialog({
             </button>
           </div>
 
-          {/* Comandos e atalhos */}
-          <div className="rounded-lg border p-4 space-y-3">
-            <p className="text-base font-medium">Comandos e atalhos</p>
-            <p className="text-sm text-muted-foreground">
-              Teclas disponíveis na tela inicial e durante a reprodução.
-            </p>
-            <ul className="space-y-2.5 text-sm">
-              {comandos.map(({ tecla, acao }) => (
-                <li key={tecla} className="flex items-start gap-3">
-                  <Kbd className="shrink-0 font-mono">{tecla}</Kbd>
-                  <span className="text-muted-foreground">{acao}</span>
-                </li>
-              ))}
-            </ul>
+          {/* Mapa de teclas e atalhos */}
+          <div className="rounded-lg border p-4 space-y-4">
+            <p className="text-base font-medium">Teclas e atalhos</p>
+
+            <div>
+              <p className="text-sm font-medium text-stone-700 mb-2">Tela inicial (busca)</p>
+              <ul className="space-y-2 text-sm">
+                {comandosTelaInicial.map(({ tecla, acao }) => (
+                  <li key={tecla} className="flex items-start gap-3">
+                    <Kbd className="shrink-0 font-mono text-xs">{tecla}</Kbd>
+                    <span className="text-muted-foreground">{acao}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-stone-700 mb-2">Durante a reprodução</p>
+              <ul className="space-y-2 text-sm">
+                {comandosReproducao.map(({ tecla, acao }) => (
+                  <li key={tecla} className="flex items-start gap-3">
+                    <Kbd className="shrink-0 font-mono text-xs">{tecla}</Kbd>
+                    <span className="text-muted-foreground">{acao}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             <div className="rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground">
-              Durante a música, digite 5 dígitos para adicionar à fila; ao terminar a atual, a próxima toca automaticamente.
+              Durante a música: digite 5 dígitos para adicionar à fila “próxima”; ao terminar a atual, a próxima toca automaticamente.
             </div>
           </div>
         </div>

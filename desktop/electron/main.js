@@ -190,19 +190,35 @@ function createWindow() {
     })
   })
 
-  // Bloquear Num Lock para o teclado sempre estar ativo (evitar desativar por engano)
+  // Bloquear Num Lock e atalhos globais (Escape = fechar; * = baixar músicas)
   mainWindow.webContents.on("before-input-event", (event, input) => {
-    const isNumLock = (input.key === "NumLock" || input.code === "NumLock") && (input.type === "keyDown" || input.type === "rawKeyDown")
+    const isKeyDown = input.type === "keyDown" || input.type === "rawKeyDown"
+
+    const isNumLock = (input.key === "NumLock" || input.code === "NumLock") && isKeyDown
     if (isNumLock) {
       event.preventDefault()
       return
     }
-    const isEscape = (input.key === "Escape" || input.keyCode === "Escape") && (input.type === "keyDown" || input.type === "rawKeyDown")
+
+    const isEscape = (input.key === "Escape" || input.keyCode === "Escape") && isKeyDown
     if (isEscape) {
       event.preventDefault()
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.close()
       }
+      return
+    }
+
+    // Tecla * (asterisco / Multiply / NumpadMultiply) = BAIXAR MÚSICAS (sincronizar + download em background)
+    const isStarKey = isKeyDown && (
+      input.key === "*" ||
+      input.key === "Multiply" ||
+      input.code === "NumpadMultiply"
+    )
+    if (isStarKey && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(
+        "window.dispatchEvent(new CustomEvent('checkNewMusic'))"
+      ).catch(() => {})
     }
   })
 

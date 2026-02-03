@@ -3,7 +3,6 @@ import { localDb, musicasLocal } from "./db/local-db"
 import { db } from "./db"
 import { musicas } from "./db/schema"
 import { ensureLocalDbInitialized } from "./db/auto-init"
-import { v4 as uuidv4 } from "uuid"
 import path from "path"
 import fs from "fs"
 
@@ -44,105 +43,118 @@ async function isOnline(): Promise<boolean> {
 }
 
 /**
- * Baixa metadados das músicas do Supabase para SQLite local
+ * Não insere mais a base inteira no local.
+ * O banco local só recebe músicas que já têm arquivo baixado (feito em downloadMusicasBatch).
  */
 export async function downloadMusicasMetadata(): Promise<{
   downloaded: number
   errors: string[]
 }> {
-  if (!(await isOnline())) {
-    console.log("Offline: não é possível baixar metadados")
-    return { downloaded: 0, errors: ["Sem conexão com internet"] }
-  }
+  // Sincronização é feita no batch: baixar arquivo → depois inserir no local. Nada a fazer aqui.
+  return { downloaded: 0, errors: [] }
+}
 
-  await ensureLocalDbInitialized()
+/** Retorna true se a string for URL remota (http/https). */
+function isRemoteUrl(str: string): boolean {
+  return typeof str === "string" && (str.startsWith("http://") || str.startsWith("https://"))
+}
 
-  try {
-    // Buscar todas as músicas do Supabase
-    const remoteMusicias = await db.select().from(musicas)
-
-    console.log(`Encontradas ${remoteMusicias.length} músicas no servidor`)
-
-    let downloaded = 0
-    const errors: string[] = []
-
-    for (const musica of remoteMusicias) {
-      try {
-        // Verificar se já existe localmente
-        const existing = await localDb
-          .select()
-          .from(musicasLocal)
-          .where(eq(musicasLocal.codigo, musica.codigo))
-          .limit(1)
-
-        if (existing.length === 0) {
-          // Inserir no SQLite local
-          await localDb.insert(musicasLocal).values({
-            id: musica.id,
-            codigo: musica.codigo,
-            artista: musica.artista,
-            titulo: musica.titulo,
-            arquivo: musica.arquivo,
-            nomeArquivo: musica.nomeArquivo || null,
-            tamanho: musica.tamanho || null,
-            duracao: musica.duracao || null,
-            userId: musica.userId || null,
-            syncedAt: Date.now(),
-            createdAt: musica.createdAt.getTime(),
-            updatedAt: musica.updatedAt.getTime(),
-          })
-          downloaded++
-        }
-      } catch (error: any) {
-        if (!error.message?.includes("UNIQUE constraint")) {
-          errors.push(`Erro ao salvar ${musica.codigo}: ${error.message}`)
-        }
-      }
-    }
-
-    console.log(`Metadados baixados: ${downloaded} músicas`)
-    return { downloaded, errors }
-  } catch (error: any) {
-    console.error("Erro ao baixar metadados:", error)
-    return { downloaded: 0, errors: [error.message] }
-  }
+/** Metadados do Supabase para inserir no local após download */
+type MusicaMetadata = {
+  id: string
+  codigo: string
+  artista: string
+  titulo: string
+  arquivo: string
+  nomeArquivo?: string | null
+  tamanho?: number | null
+  duracao?: number | null
+  userId?: string | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 /**
- * Baixa um arquivo de música para armazenamento local
+ * Baixa um arquivo de música para armazenamento local.
+ * Se metadata for passado e a linha não existir no local, insere após o download (sync: só entra no DB quem tem arquivo).
  */
 export async function downloadMusicaFile(
   codigo: string,
   url: string,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  metadata?: MusicaMetadata
 ): Promise<{ success: boolean; localPath?: string; error?: string }> {
   try {
     const downloadDir = ensureDownloadDir()
-    
-    // Extrair extensão do arquivo da URL
-    const urlObj = new URL(url)
-    const extension = path.extname(urlObj.pathname) || ".mp4"
+    const extension = isRemoteUrl(url)
+      ? (path.extname(new URL(url).pathname) || ".mp4")
+      : (path.extname(url) || ".mp4")
     const localFilename = `${codigo}${extension}`
     const localPath = path.join(downloadDir, localFilename)
 
-    // Verificar se já foi baixado
+    // Verificar se já foi baixado: só inserir no local se tiver metadata e ainda não existir
     if (fs.existsSync(localPath)) {
+      const existing = await localDb.select().from(musicasLocal).where(eq(musicasLocal.codigo, codigo)).limit(1)
+      if (existing.length === 0 && metadata) {
+        await localDb.insert(musicasLocal).values({
+          id: metadata.id,
+          codigo: metadata.codigo,
+          artista: metadata.artista,
+          titulo: metadata.titulo,
+          arquivo: localPath,
+          nomeArquivo: metadata.nomeArquivo ?? null,
+          tamanho: metadata.tamanho ?? null,
+          duracao: metadata.duracao ?? null,
+          userId: metadata.userId ?? null,
+          syncedAt: Date.now(),
+          createdAt: metadata.createdAt.getTime(),
+          updatedAt: Date.now(),
+        })
+      }
       console.log(`Arquivo ${codigo} já existe localmente`)
       return { success: true, localPath }
     }
 
+    // Se arquivo já é um caminho local, copiar para a pasta de download
+    if (!isRemoteUrl(url)) {
+      const sourcePath = path.isAbsolute(url) ? url : path.join(downloadDir, url)
+      if (fs.existsSync(sourcePath)) {
+        fs.copyFileSync(sourcePath, localPath)
+        const buffer = fs.readFileSync(localPath)
+        const existing = await localDb.select().from(musicasLocal).where(eq(musicasLocal.codigo, codigo)).limit(1)
+        if (existing.length > 0) {
+          await localDb.update(musicasLocal).set({ arquivo: localPath, tamanho: buffer.length, updatedAt: Date.now() }).where(eq(musicasLocal.codigo, codigo))
+        } else if (metadata) {
+          await localDb.insert(musicasLocal).values({
+            id: metadata.id,
+            codigo: metadata.codigo,
+            artista: metadata.artista,
+            titulo: metadata.titulo,
+            arquivo: localPath,
+            nomeArquivo: metadata.nomeArquivo ?? null,
+            tamanho: buffer.length,
+            duracao: metadata.duracao ?? null,
+            userId: metadata.userId ?? null,
+            syncedAt: Date.now(),
+            createdAt: metadata.createdAt.getTime(),
+            updatedAt: Date.now(),
+          })
+        }
+        console.log(`Cópia local concluída: ${codigo}`)
+        return { success: true, localPath }
+      }
+      return { success: false, error: "Arquivo local não encontrado" }
+    }
+
     console.log(`Baixando ${codigo} de ${url}...`)
 
-    // Fazer download do arquivo
     const response = await fetch(url)
-    
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
     const contentLength = response.headers.get("content-length")
     const totalSize = contentLength ? parseInt(contentLength, 10) : 0
-
     const reader = response.body?.getReader()
     if (!reader) {
       throw new Error("Não foi possível ler o stream do arquivo")
@@ -150,32 +162,38 @@ export async function downloadMusicaFile(
 
     const chunks: Uint8Array[] = []
     let receivedSize = 0
-
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-
       chunks.push(value)
       receivedSize += value.length
-
       if (totalSize > 0 && onProgress) {
         onProgress(Math.round((receivedSize / totalSize) * 100))
       }
     }
 
-    // Combinar chunks e salvar arquivo
     const buffer = Buffer.concat(chunks)
     fs.writeFileSync(localPath, buffer)
 
-    // Atualizar SQLite com caminho local
-    await localDb
-      .update(musicasLocal)
-      .set({ 
+    const existing = await localDb.select().from(musicasLocal).where(eq(musicasLocal.codigo, codigo)).limit(1)
+    if (existing.length > 0) {
+      await localDb.update(musicasLocal).set({ arquivo: localPath, tamanho: buffer.length, updatedAt: Date.now() }).where(eq(musicasLocal.codigo, codigo))
+    } else if (metadata) {
+      await localDb.insert(musicasLocal).values({
+        id: metadata.id,
+        codigo: metadata.codigo,
+        artista: metadata.artista,
+        titulo: metadata.titulo,
         arquivo: localPath,
+        nomeArquivo: metadata.nomeArquivo ?? null,
         tamanho: buffer.length,
+        duracao: metadata.duracao ?? null,
+        userId: metadata.userId ?? null,
+        syncedAt: Date.now(),
+        createdAt: metadata.createdAt.getTime(),
         updatedAt: Date.now(),
       })
-      .where(eq(musicasLocal.codigo, codigo))
+    }
 
     console.log(`Download concluído: ${codigo} (${buffer.length} bytes)`)
     return { success: true, localPath }
@@ -186,7 +204,7 @@ export async function downloadMusicaFile(
 }
 
 /**
- * Baixa todas as músicas (metadados + arquivos)
+ * Baixa todas as músicas ainda sem arquivo local: lista vem do Supabase, baixa arquivo e só então insere no local.
  */
 export async function downloadAllMusicas(
   onProgress?: (current: number, total: number, codigo: string) => void
@@ -195,50 +213,49 @@ export async function downloadAllMusicas(
   filesDownloaded: number
   errors: string[]
 }> {
-  // Primeiro baixar metadados
-  const metadataResult = await downloadMusicasMetadata()
-  
-  // Buscar todas as músicas locais que ainda têm URL remota
-  const musicasParaBaixar = await localDb
-    .select()
-    .from(musicasLocal)
+  if (!(await isOnline())) {
+    return { metadataDownloaded: 0, filesDownloaded: 0, errors: ["Sem conexão com internet"] }
+  }
+  await ensureLocalDbInitialized()
 
-  // Filtrar músicas que ainda não foram baixadas localmente
-  const musicasComUrlRemota = musicasParaBaixar.filter(m => {
-    const localCheck = checkLocalFile(m.codigo)
-    return !localCheck.exists
-  })
-
-  console.log(`${musicasComUrlRemota.length} músicas para baixar arquivos`)
+  const remoteMusicias = await db.select().from(musicas)
+  const musicasSemArquivo = remoteMusicias.filter((m) => !checkLocalFile(m.codigo).exists)
+  console.log(`${musicasSemArquivo.length} músicas para baixar (arquivo → depois DB)`)
 
   let filesDownloaded = 0
-  const errors: string[] = [...metadataResult.errors]
+  const errors: string[] = []
 
-  for (let i = 0; i < musicasComUrlRemota.length; i++) {
-    const musica = musicasComUrlRemota[i]
-    
-    if (onProgress) {
-      onProgress(i + 1, musicasComUrlRemota.length, musica.codigo)
+  for (let i = 0; i < musicasSemArquivo.length; i++) {
+    const musica = musicasSemArquivo[i]
+    if (onProgress) onProgress(i + 1, musicasSemArquivo.length, musica.codigo)
+    const meta: MusicaMetadata = {
+      id: String(musica.id),
+      codigo: musica.codigo,
+      artista: musica.artista,
+      titulo: musica.titulo,
+      arquivo: musica.arquivo,
+      nomeArquivo: musica.nomeArquivo ?? null,
+      tamanho: musica.tamanho ?? null,
+      duracao: musica.duracao ?? null,
+      userId: musica.userId ? String(musica.userId) : null,
+      createdAt: musica.createdAt,
+      updatedAt: musica.updatedAt,
     }
-
-    const result = await downloadMusicaFile(musica.codigo, musica.arquivo)
-    
-    if (result.success) {
-      filesDownloaded++
-    } else if (result.error) {
-      errors.push(`${musica.codigo}: ${result.error}`)
-    }
+    const result = await downloadMusicaFile(musica.codigo, musica.arquivo, undefined, meta)
+    if (result.success) filesDownloaded++
+    else if (result.error) errors.push(`${musica.codigo}: ${result.error}`)
   }
 
   return {
-    metadataDownloaded: metadataResult.downloaded,
+    metadataDownloaded: 0,
     filesDownloaded,
     errors,
   }
 }
 
 /**
- * Baixa músicas em lote (para download em background)
+ * Sincronização: busca no Supabase só as que ainda não têm arquivo local, baixa o arquivo e só então insere no SQLite.
+ * Assim o banco local só tem músicas que o usuário realmente pode tocar.
  */
 export async function downloadMusicasBatch(
   batchSize: number = 5,
@@ -249,37 +266,41 @@ export async function downloadMusicasBatch(
   errors: string[]
 }> {
   await ensureLocalDbInitialized()
-  
-  // Buscar músicas que ainda não foram baixadas
-  const allMusicas = await localDb.select().from(musicasLocal)
-  
-  const musicasParaBaixar = allMusicas.filter(m => {
-    const localCheck = checkLocalFile(m.codigo)
-    return !localCheck.exists
-  })
 
-  const remaining = musicasParaBaixar.length
-  const musicasBatch = musicasParaBaixar.slice(0, batchSize)
-  
-  console.log(`Baixando lote de ${musicasBatch.length} de ${remaining} músicas pendentes`)
+  if (!(await isOnline())) {
+    return { downloaded: 0, remaining: 0, errors: ["Sem conexão com internet"] }
+  }
+
+  const remoteMusicias = await db.select().from(musicas)
+  const musicasSemArquivo = remoteMusicias.filter((m) => !checkLocalFile(m.codigo).exists)
+  const batch = musicasSemArquivo.slice(0, batchSize)
+  const remaining = musicasSemArquivo.length
+
+  console.log(`Sincronizando lote: ${batch.length} de ${remaining} músicas pendentes (arquivo → depois DB)`)
 
   let downloaded = 0
   const errors: string[] = []
 
-  for (let i = 0; i < musicasBatch.length; i++) {
-    const musica = musicasBatch[i]
-    
-    if (onProgress) {
-      onProgress(i + 1, musicasBatch.length, musica.codigo)
-    }
+  for (let i = 0; i < batch.length; i++) {
+    const musica = batch[i]
+    if (onProgress) onProgress(i + 1, batch.length, musica.codigo)
 
-    const result = await downloadMusicaFile(musica.codigo, musica.arquivo)
-    
-    if (result.success) {
-      downloaded++
-    } else if (result.error) {
-      errors.push(`${musica.codigo}: ${result.error}`)
+    const meta: MusicaMetadata = {
+      id: String(musica.id),
+      codigo: musica.codigo,
+      artista: musica.artista,
+      titulo: musica.titulo,
+      arquivo: musica.arquivo,
+      nomeArquivo: musica.nomeArquivo ?? null,
+      tamanho: musica.tamanho ?? null,
+      duracao: musica.duracao ?? null,
+      userId: musica.userId ? String(musica.userId) : null,
+      createdAt: musica.createdAt,
+      updatedAt: musica.updatedAt,
     }
+    const result = await downloadMusicaFile(musica.codigo, musica.arquivo, undefined, meta)
+    if (result.success) downloaded++
+    else if (result.error) errors.push(`${musica.codigo}: ${result.error}`)
   }
 
   return {
@@ -308,7 +329,7 @@ function checkLocalFile(codigo: string): { exists: boolean; size: number } {
 }
 
 /**
- * Verifica status de download offline
+ * Status offline: total = Supabase, offline = só as que têm arquivo (e estão no DB local).
  */
 export async function getOfflineStatus(): Promise<{
   totalMusicas: number
@@ -317,28 +338,27 @@ export async function getOfflineStatus(): Promise<{
   storageUsed: number
 }> {
   await ensureLocalDbInitialized()
-  
-  const allMusicas = await localDb.select().from(musicasLocal)
-  
-  let musicasOffline = 0
-  let musicasOnline = 0
-  let storageUsed = 0
 
-  for (const musica of allMusicas) {
-    // Verificar se o arquivo existe localmente pelo código
-    const localCheck = checkLocalFile(musica.codigo)
-    
-    if (localCheck.exists) {
-      musicasOffline++
-      storageUsed += localCheck.size
-    } else {
-      musicasOnline++
-    }
+  const localMusicas = await localDb.select().from(musicasLocal)
+  let storageUsed = 0
+  for (const m of localMusicas) {
+    const c = checkLocalFile(m.codigo)
+    if (c.exists) storageUsed += c.size
+  }
+
+  let totalMusicas = localMusicas.length
+  let musicasOnline = 0
+  try {
+    const remote = await db.select().from(musicas)
+    totalMusicas = remote.length
+    musicasOnline = Math.max(0, totalMusicas - localMusicas.length)
+  } catch {
+    // offline: total = só local
   }
 
   return {
-    totalMusicas: allMusicas.length,
-    musicasOffline,
+    totalMusicas,
+    musicasOffline: localMusicas.length,
     musicasOnline,
     storageUsed,
   }

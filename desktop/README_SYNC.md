@@ -67,6 +67,21 @@ O dashboard web (`/api/estatisticas`) mostra:
 - ✅ **Novos Usuários**: Usuários cadastrados recentemente
 - ✅ **Estatísticas Gerais**: Total de músicas, usuários, etc.
 
+## 🗑️ Zerar dados locais (músicas / histórico)
+
+**Quando usar:** Você apagou a pasta de músicas ou quer forçar o app a baixar tudo de novo.
+
+1. **Feche o app** (Electron e Next) para não travar o banco.
+2. No terminal, na pasta `desktop`:
+
+```bash
+bun run db:zerar
+```
+
+Isso apaga **tudo** do SQLite local: `musicas_local`, `historico_local`, `ativacao_local`. Na próxima abertura o app vai sincronizar e baixar as músicas de novo.
+
+---
+
 ## 🛠️ Troubleshooting
 
 ### Banco não inicializa

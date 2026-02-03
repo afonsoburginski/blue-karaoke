@@ -181,9 +181,9 @@ export function UnifiedSearch({ onSelectCodigo, value, onChange }: UnifiedSearch
       <form onSubmit={handleSubmit}>
         <div className="relative">
           {isCode ? (
-            <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-cyan-600" />
+            <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-cyan-400" />
           ) : (
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-stone-600" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/70" />
           )}
           <Input
             type="text"
@@ -199,11 +199,10 @@ export function UnifiedSearch({ onSelectCodigo, value, onChange }: UnifiedSearch
             onBlur={() => {
               setTimeout(() => setShowResults(false), 200)
             }}
-            style={{ backgroundColor: "#fff" }}
-            className={`pl-10 pr-10 h-14 !text-xl rounded-xl !bg-white text-stone-900 placeholder:text-stone-600 placeholder:text-xl border-2 border-stone-400 shadow-md focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:outline-none ${isCode ? "border-cyan-500 ring-2 ring-cyan-500/30" : ""}`}
+            className={`pl-10 pr-10 h-14 !text-xl rounded-xl bg-white/10 text-white placeholder:text-white/90 placeholder:text-xl border-2 border-white/30 shadow-md focus-visible:border-cyan-400 focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:outline-none ${isCode ? "border-cyan-400 ring-2 ring-cyan-500/30" : ""}`}
           />
           {isLoading && !isCode && (
-            <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 animate-spin text-stone-600" />
+            <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 animate-spin text-white/70" />
           )}
         </div>
       </form>
@@ -216,12 +215,12 @@ export function UnifiedSearch({ onSelectCodigo, value, onChange }: UnifiedSearch
           if (!el) return null
           return createPortal(
             selectedMusica ? (
-              <div className="w-full max-w-md text-stone-900 text-left text-2xl">
-                <p className="text-xl font-medium text-stone-500 uppercase tracking-wide mb-2">Pressione Enter para iniciar</p>
+              <div className="w-full max-w-md text-white text-left text-2xl">
+                <p className="text-xl font-medium text-white/80 uppercase tracking-wide mb-2">Pressione Enter para iniciar</p>
                 <div className="space-y-2 text-2xl">
-                  <p><span className="font-medium text-stone-500">Título:</span> <span className="font-semibold text-stone-900 truncate block">{selectedMusica.titulo}</span></p>
-                  <p><span className="font-medium text-stone-500">Artista:</span> <span className="text-stone-800 truncate block">{selectedMusica.artista}</span></p>
-                  <p><span className="font-medium text-stone-500">Código:</span> <span className="font-mono font-bold text-cyan-700">{selectedMusica.codigo}</span></p>
+                  <p><span className="font-medium text-white/80">Título:</span> <span className="font-semibold text-white truncate block">{selectedMusica.titulo}</span></p>
+                  <p><span className="font-medium text-white/80">Artista:</span> <span className="text-white truncate block">{selectedMusica.artista}</span></p>
+                  <p><span className="font-medium text-white/80">Código:</span> <span className="font-mono font-bold text-cyan-300">{selectedMusica.codigo}</span></p>
                 </div>
               </div>
             ) : null,
