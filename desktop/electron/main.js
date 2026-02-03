@@ -22,7 +22,6 @@ let logPath = path.join(os.tmpdir(), "blue-karaoke.log")
 let logStream = fs.createWriteStream(logPath, { flags: "a" })
 let logsDir = null 
 
-// Salvar console original antes de modificar
 const originalConsoleLog = console.log
 const originalConsoleError = console.error
 const originalConsoleWarn = console.warn
