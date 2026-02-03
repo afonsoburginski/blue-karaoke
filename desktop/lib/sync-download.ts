@@ -178,29 +178,49 @@ export async function downloadMusicaFile(
     }
 
     const buffer = Buffer.concat(chunks)
-    fs.writeFileSync(localPath, buffer)
-
-    const existing = await localDb.select().from(musicasLocal).where(eq(musicasLocal.codigo, codigo)).limit(1)
-    if (existing.length > 0) {
-      await localDb.update(musicasLocal).set({ arquivo: localPath, tamanho: buffer.length, updatedAt: Date.now() }).where(eq(musicasLocal.codigo, codigo))
-    } else if (metadata) {
-      await localDb.insert(musicasLocal).values({
-        id: metadata.id,
-        codigo: metadata.codigo,
-        artista: metadata.artista,
-        titulo: metadata.titulo,
-        arquivo: localPath,
-        nomeArquivo: metadata.nomeArquivo ?? null,
-        tamanho: buffer.length,
-        duracao: metadata.duracao ?? null,
-        userId: metadata.userId ?? null,
-        syncedAt: Date.now(),
-        createdAt: metadata.createdAt.getTime(),
-        updatedAt: Date.now(),
-      })
+    
+    // Download ATÔMICO: arquivo + banco juntos
+    // Se não tem metadata, não pode baixar (precisa dos dados para o banco)
+    if (!metadata) {
+      console.error(`[DOWNLOAD] Sem metadata para ${codigo}, abortando download`)
+      return { success: false, error: "Metadata obrigatório para download" }
     }
-
-    console.log(`Download concluído: ${codigo} (${buffer.length} bytes)`)
+    
+    // 1. Salvar arquivo
+    fs.writeFileSync(localPath, buffer)
+    
+    // 2. Inserir/atualizar no banco
+    try {
+      const existing = await localDb.select().from(musicasLocal).where(eq(musicasLocal.codigo, codigo)).limit(1)
+      if (existing.length > 0) {
+        await localDb.update(musicasLocal).set({ 
+          arquivo: localPath, 
+          tamanho: buffer.length, 
+          updatedAt: Date.now() 
+        }).where(eq(musicasLocal.codigo, codigo))
+      } else {
+        await localDb.insert(musicasLocal).values({
+          id: metadata.id,
+          codigo: metadata.codigo,
+          artista: metadata.artista,
+          titulo: metadata.titulo,
+          arquivo: localPath,
+          nomeArquivo: metadata.nomeArquivo ?? null,
+          tamanho: buffer.length,
+          duracao: metadata.duracao ?? null,
+          userId: metadata.userId ?? null,
+          syncedAt: Date.now(),
+          createdAt: metadata.createdAt.getTime(),
+          updatedAt: Date.now(),
+        })
+      }
+      console.log(`[DOWNLOAD] ${codigo} baixado e inserido no banco (${buffer.length} bytes)`)
+    } catch (dbError: any) {
+      // ROLLBACK: se falhou o banco, deleta o arquivo
+      console.error(`[DOWNLOAD] Erro no banco para ${codigo}, removendo arquivo:`, dbError.message)
+      try { fs.unlinkSync(localPath) } catch {}
+      return { success: false, error: `Erro no banco: ${dbError.message}` }
+    }
     return { success: true, localPath }
   } catch (error: any) {
     console.error(`Erro ao baixar ${codigo}:`, error)
@@ -334,7 +354,8 @@ export function checkLocalFile(codigo: string): { exists: boolean; size: number 
 }
 
 /**
- * Status offline: total = Supabase, offline = músicas com arquivo no disco.
+ * Status offline: total = Supabase, offline = músicas no banco local.
+ * Se está no banco local, tem arquivo (download é atômico).
  */
 export async function getOfflineStatus(): Promise<{
   totalMusicas: number
@@ -344,17 +365,10 @@ export async function getOfflineStatus(): Promise<{
 }> {
   await ensureLocalDbInitialized()
 
-  const localMusicas = await localDb.select().from(musicasLocal)
-  let storageUsed = 0
-  let musicasOffline = 0
-  
-  for (const m of localMusicas) {
-    const c = checkLocalFile(m.codigo)
-    if (c.exists) {
-      musicasOffline++
-      storageUsed += c.size
-    }
-  }
+  // Contar músicas no banco local (= músicas baixadas)
+  const localMusicas = await localDb.select({ tamanho: musicasLocal.tamanho }).from(musicasLocal)
+  const musicasOffline = localMusicas.length
+  const storageUsed = localMusicas.reduce((acc, m) => acc + (m.tamanho || 0), 0)
 
   let totalMusicas = musicasOffline
   let musicasOnline = 0
@@ -363,7 +377,7 @@ export async function getOfflineStatus(): Promise<{
     totalMusicas = remote.length
     musicasOnline = Math.max(0, totalMusicas - musicasOffline)
   } catch {
-    // offline
+    // offline: total = local
   }
 
   return {

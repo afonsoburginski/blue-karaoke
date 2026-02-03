@@ -264,19 +264,32 @@ function startNextServer() {
     try {
       console.log("Iniciando servidor Next.js...")
 
-      // Usar userData (AppData) para dados - Program Files não é gravável
-      const dataDir = app.getPath("userData")
+      // App portátil: dados na pasta do executável
+      const exePath = app.getPath("exe")
+      const exeDir = path.dirname(exePath)
+      const dataDir = path.join(exeDir, "data")
       
       // Criar pasta de dados se não existir
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true })
+      try {
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir, { recursive: true })
+        }
+        log("Pasta de dados (portátil):", dataDir)
+      } catch (mkdirErr) {
+        // Fallback para AppData se não conseguir criar na pasta do exe
+        const fallbackDir = app.getPath("userData")
+        log("Não foi possível criar pasta no exe, usando AppData:", fallbackDir)
+        if (!fs.existsSync(fallbackDir)) {
+          fs.mkdirSync(fallbackDir, { recursive: true })
+        }
       }
       
-      log("Pasta de dados:", dataDir)
+      const finalDataDir = fs.existsSync(dataDir) ? dataDir : app.getPath("userData")
+      log("Pasta de dados final:", finalDataDir)
 
       const envFromFile = {}
       for (const envFile of [".env", ".env.local", "env.txt"]) {
-        const envPath = path.join(dataDir, envFile)
+        const envPath = path.join(finalDataDir, envFile)
         if (fs.existsSync(envPath)) {
           try {
             const content = fs.readFileSync(envPath, "utf8")
@@ -299,14 +312,14 @@ function startNextServer() {
         }
       }
 
-      // Executar servidor como processo separado (dataDir = pasta junto do executável para SQLite e musicas)
+      // Executar servidor como processo separado (finalDataDir = pasta junto do executável para SQLite e musicas)
       const env = {
         ...process.env,
         ...envFromFile,
         PORT: PORT.toString(),
         NODE_ENV: "production",
         ELECTRON_RUN_AS_NODE: "1",
-        BLUE_KARAOKE_USER_DATA: dataDir,
+        BLUE_KARAOKE_USER_DATA: finalDataDir,
       }
 
       nextServer = spawn(process.execPath, [serverPath], {
@@ -382,9 +395,21 @@ function startNextServer() {
 
 // Aguardar Electron estar pronto
 app.whenReady().then(async () => {
-  // Criar pasta de logs dentro do userData (AppData)
+  // Criar pasta de logs na pasta do executável (app portátil)
   try {
-    const dataDir = app.getPath("userData")
+    const exePath = app.getPath("exe")
+    const exeDir = path.dirname(exePath)
+    let dataDir = path.join(exeDir, "data")
+    
+    // Tentar criar pasta de dados, fallback para AppData
+    try {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true })
+      }
+    } catch {
+      dataDir = app.getPath("userData")
+    }
+    
     logsDir = path.join(dataDir, "logs")
     fs.mkdirSync(logsDir, { recursive: true })
     const correctLogPath = path.join(logsDir, "blue-karaoke.log")

@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ConfiguracoesDialog } from "@/components/configuracoes-dialog"
 import { QrCodesHome } from "@/components/qr-code"
 import { toast } from "sonner"
-import { Calendar, Clock, AlertCircle, Ban, Download, Settings } from "lucide-react"
+import { Calendar, Clock, AlertCircle, Pause, Play, Settings } from "lucide-react"
 
 function HomePageFallback() {
   return (
@@ -70,10 +70,13 @@ function HomePageContent() {
     const handleCheckNewMusic = async () => {
       if (!isActivated && !justActivated) return
       if (blockDownloads) {
-        toast.info("Downloads estão bloqueados. Ative em \"Permitir download\" para baixar.")
-        return
+        // Desbloquear e iniciar download
+        setBlockDownloads(false)
+        if (typeof window !== "undefined") {
+          localStorage.setItem("blue-karaoke-download-blocked", "0")
+        }
       }
-      toast.info("Baixando músicas… (tecla *)")
+      toast.info("Baixando músicas…")
       await downloadMetadata()
       startBackgroundDownload()
     }
@@ -256,6 +259,12 @@ function HomePageContent() {
           })
           .catch(() => toast.error("Erro ao buscar música aleatória."))
       }
+      // P = pausar/retomar downloads
+      else if (e.key === "p" || e.key === "P") {
+        e.preventDefault()
+        toggleBlockDownloads()
+        toast.info(blockDownloads ? "Downloads retomados" : "Downloads pausados")
+      }
       else {
         e.preventDefault()
       }
@@ -263,7 +272,7 @@ function HomePageContent() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [codigo, error, isLoading, handleSubmit, isActivatedOrJustActivated, ativacaoDialogOpen, configDialogOpen, router])
+  }, [codigo, error, isLoading, handleSubmit, isActivatedOrJustActivated, ativacaoDialogOpen, configDialogOpen, router, toggleBlockDownloads, blockDownloads])
 
   // Electron: detectar ambiente e carregar "Iniciar com Windows"
   useEffect(() => {
@@ -357,41 +366,32 @@ function HomePageContent() {
               {(syncMessage || isDownloading) && (
                 <>
                   <span className="text-stone-400">|</span>
-                  <div className="flex items-center gap-2">
-                    {isDownloading && (
+                  {blockDownloads ? (
+                    <button
+                      type="button"
+                      onClick={toggleBlockDownloads}
+                      className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                      title="Clique para retomar (P)"
+                    >
+                      <Pause className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                      <span className="text-amber-700 text-xl font-medium">Pausado</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={toggleBlockDownloads}
+                      className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                      title="Clique para pausar (P)"
+                    >
                       <div className="w-5 h-5 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                    )}
-                    <span className="text-cyan-700 text-xl font-medium">
-                      {isDownloading ? "Baixando…" : (syncMessage || "Sincronizando…")}
-                    </span>
-                  </div>
+                      <span className="text-cyan-700 text-xl font-medium">
+                        {isDownloading ? "Baixando…" : (syncMessage || "Sincronizando…")}
+                      </span>
+                    </button>
+                  )}
                 </>
               )}
             </div>
-            {isActivated && (
-              <button
-                type="button"
-                onClick={toggleBlockDownloads}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xl font-medium transition-colors ${
-                  blockDownloads
-                    ? "bg-amber-100 text-amber-900 border border-amber-500 hover:bg-amber-200"
-                    : "bg-stone-200 text-stone-900 border border-stone-400 hover:bg-stone-300"
-                }`}
-                title={blockDownloads ? "Permitir novos downloads" : "Impedir novos downloads"}
-              >
-                {blockDownloads ? (
-                  <>
-                    <Download className="h-5 w-5" aria-hidden />
-                    Permitir download
-                  </>
-                ) : (
-                  <>
-                    <Ban className="h-5 w-5" aria-hidden />
-                    Impedir download
-                  </>
-                )}
-              </button>
-            )}
           </div>
         )}
       </div>

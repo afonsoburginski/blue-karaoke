@@ -1,5 +1,6 @@
 !macro customUnInstall
-  ; Limpar pasta de dados no AppData (musicas, banco, logs, tudo)
+  ; App portátil: pasta data fica junto do executável, o NSIS já remove tudo
+  ; Limpar também AppData (fallback ou versões antigas)
   RMDir /r "$APPDATA\blue-karaoke"
   RMDir /r "$APPDATA\Blue Karaoke"
   RMDir /r "$LOCALAPPDATA\blue-karaoke"

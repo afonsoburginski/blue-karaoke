@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getMusicaByCodigo } from "@/lib/db-utils"
-import { checkLocalFile } from "@/lib/sync-download"
 import { db } from "@/lib/db"
 import { musicas } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
@@ -11,8 +10,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const musica = await getMusicaByCodigo(codigo)
 
-    // Só retorna exists: true se a música existe no banco E tem arquivo no disco
-    if (musica && checkLocalFile(codigo).exists) {
+    // Se está no banco local, o arquivo existe (download é atômico)
+    if (musica) {
       return NextResponse.json({ exists: true, musica })
     } else {
       return NextResponse.json({ exists: false })
