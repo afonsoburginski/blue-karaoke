@@ -1,12 +1,15 @@
 {
   "name": "blue-karaoke",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "description": "Sistema de Karaokê Blue Karaoke - Reprodução de músicas para karaokê",
   "author": "Blue Karaoke <contato@bluekaraokes.com.br>",
   "private": true,
   "main": "electron/main.js",
   "homepage": "./",
-  "repository": { "type": "git", "url": "https://github.com/afonsoburginski/blue-karaoke.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afonsoburginski/blue-karaoke.git"
+  },
   "scripts": {
     "build": "next build --webpack",
     "dev": "next dev",
@@ -80,6 +83,7 @@
     "dotenv": "^17.2.3",
     "drizzle-kit": "0.31.6",
     "drizzle-orm": "0.44.7",
+    "electron-updater": "^6.7.3",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lottie-react": "^2.4.1",
@@ -101,8 +105,7 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.0.3",
     "vaul": "^0.9.9",
-    "zod": "3.25.76",
-    "electron-updater": "^6.7.3"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
@@ -117,8 +120,10 @@
     "electron": "^33.0.0",
     "electron-builder": "^26.0.12",
     "postcss": "^8.5",
+    "sharp": "^0.34.5",
     "shx": "^0.4.0",
     "tailwindcss": "^4.1.9",
+    "to-ico": "^1.1.5",
     "tw-animate-css": "1.3.3",
     "typescript": "^5",
     "wait-on": "^9.0.3"

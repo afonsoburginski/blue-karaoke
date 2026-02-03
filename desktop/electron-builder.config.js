@@ -45,7 +45,7 @@ module.exports = {
   asar: false, // Desabilitar ASAR para evitar problemas com better-sqlite3
   win: {
     target: "nsis",
-    icon: "public/icon.png",
+    icon: "public/icon.ico",
     signAndEditExecutable: false,
   },
   nsis: {
@@ -55,7 +55,9 @@ module.exports = {
     createDesktopShortcut: "always",
     createStartMenuShortcut: true,
     installerLanguages: ["pt_BR", "en"],
-    // Wizard completo: usuário escolhe pasta (qualquer disco/partição) antes de instalar
+    installerIcon: "public/icon.ico",
+    uninstallerIcon: "public/icon.ico",
+    installerHeaderIcon: "public/icon.ico",
   },
   forceCodeSigning: false,
   linux: {
