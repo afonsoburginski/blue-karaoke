@@ -264,10 +264,23 @@ function startNextServer() {
     try {
       console.log("Iniciando servidor Next.js...")
 
-      const userDataDir = app.getPath("userData")
+      // Usar pasta do executável (onde o app está instalado) - igual em dev
+      const exePath = app.getPath("exe")
+      const appDir = path.dirname(exePath)
+      // Em produção empacotado, a pasta de dados fica junto com o executável
+      const dataDir = path.join(appDir, "data")
+      
+      // Criar pasta de dados se não existir
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true })
+      }
+      
+      log("Pasta do executável:", exePath)
+      log("Pasta de dados:", dataDir)
+
       const envFromFile = {}
       for (const envFile of [".env", ".env.local", "env.txt"]) {
-        const envPath = path.join(userDataDir, envFile)
+        const envPath = path.join(dataDir, envFile)
         if (fs.existsSync(envPath)) {
           try {
             const content = fs.readFileSync(envPath, "utf8")
@@ -290,14 +303,14 @@ function startNextServer() {
         }
       }
 
-      // Executar servidor como processo separado (userData = pasta gravável para SQLite e musicas)
+      // Executar servidor como processo separado (dataDir = pasta junto do executável para SQLite e musicas)
       const env = {
         ...process.env,
         ...envFromFile,
         PORT: PORT.toString(),
         NODE_ENV: "production",
         ELECTRON_RUN_AS_NODE: "1",
-        BLUE_KARAOKE_USER_DATA: userDataDir,
+        BLUE_KARAOKE_USER_DATA: dataDir,
       }
 
       nextServer = spawn(process.execPath, [serverPath], {
@@ -373,10 +386,15 @@ function startNextServer() {
 
 // Aguardar Electron estar pronto
 app.whenReady().then(async () => {
-  // Criar pasta de logs dentro da pasta do app (userData) e passar a gravar lá
+  // Criar pasta de logs dentro da pasta do executável (igual em dev)
   try {
-    const userDataDir = app.getPath("userData")
-    logsDir = path.join(userDataDir, "logs")
+    const exePath = app.getPath("exe")
+    const appDir = path.dirname(exePath)
+    const dataDir = path.join(appDir, "data")
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true })
+    }
+    logsDir = path.join(dataDir, "logs")
     fs.mkdirSync(logsDir, { recursive: true })
     const correctLogPath = path.join(logsDir, "blue-karaoke.log")
 

@@ -9,6 +9,33 @@ function getMusicasPath(): string {
   return path.join(process.cwd(), "musicas")
 }
 
+// Extensões de vídeo suportadas
+const VIDEO_EXTENSIONS = [".mp4", ".mkv", ".avi", ".webm", ".mov", ".wmv"]
+
+// Encontrar arquivo de vídeo com qualquer extensão
+function findVideoFile(musicasPath: string, codigo: string): { path: string; ext: string } | null {
+  for (const ext of VIDEO_EXTENSIONS) {
+    const videoPath = path.join(musicasPath, `${codigo}${ext}`)
+    if (fs.existsSync(videoPath)) {
+      return { path: videoPath, ext }
+    }
+  }
+  return null
+}
+
+// Mapear extensão para MIME type
+function getMimeType(ext: string): string {
+  const mimeTypes: Record<string, string> = {
+    ".mp4": "video/mp4",
+    ".mkv": "video/x-matroska",
+    ".avi": "video/x-msvideo",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".wmv": "video/x-ms-wmv",
+  }
+  return mimeTypes[ext] || "video/mp4"
+}
+
 // Servir vídeos locais da pasta musicas
 export async function GET(
   request: NextRequest,
@@ -17,15 +44,18 @@ export async function GET(
   const { codigo } = await params
 
   const musicasPath = getMusicasPath()
-  const videoPath = path.join(musicasPath, `${codigo}.mp4`)
+  const videoFile = findVideoFile(musicasPath, codigo)
   
   // Verificar se o arquivo existe
-  if (!fs.existsSync(videoPath)) {
+  if (!videoFile) {
     return NextResponse.json(
       { error: "Vídeo não encontrado" },
       { status: 404 }
     )
   }
+  
+  const videoPath = videoFile.path
+  const mimeType = getMimeType(videoFile.ext)
   
   // Obter informações do arquivo
   const stat = fs.statSync(videoPath)
@@ -53,7 +83,7 @@ export async function GET(
         "Content-Range": `bytes ${start}-${end}/${fileSize}`,
         "Accept-Ranges": "bytes",
         "Content-Length": String(chunkSize),
-        "Content-Type": "video/mp4",
+        "Content-Type": mimeType,
       },
     })
   }
@@ -65,7 +95,7 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Length": String(fileSize),
-      "Content-Type": "video/mp4",
+      "Content-Type": mimeType,
       "Accept-Ranges": "bytes",
     },
   })
