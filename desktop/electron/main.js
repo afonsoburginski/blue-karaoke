@@ -464,6 +464,56 @@ app.whenReady().then(async () => {
     return {}
   })
 
+  // Atualização interna: baixar instalador da release no GitHub e executar (fallback quando electron-updater não acha)
+  const GITHUB_REPO = "afonsoburginski/blue-karaoke"
+  ipcMain.handle("download-and-install-update", async (_event, version) => {
+    if (!version || typeof version !== "string") return { ok: false, error: "Versão inválida" }
+    const tag = version.startsWith("v") ? version : `v${version}`
+    const send = (ch, ...args) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(ch, ...args)
+    }
+    try {
+      send("update-download-started")
+      log("Baixando atualização", tag, "...")
+      const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${tag}`
+      const releaseRes = await fetch(apiUrl, {
+        headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+      })
+      if (!releaseRes.ok) {
+        const err = `Release ${tag} não encontrada (${releaseRes.status})`
+        log(err)
+        return { ok: false, error: err }
+      }
+      const release = await releaseRes.json()
+      const exeAsset = release.assets?.find((a) => a.name.toLowerCase().endsWith(".exe"))
+      if (!exeAsset?.browser_download_url) {
+        const err = "Instalador .exe não encontrado na release"
+        log(err)
+        return { ok: false, error: err }
+      }
+      const tempDir = app.getPath("temp")
+      const exePath = path.join(tempDir, exeAsset.name)
+      const downloadRes = await fetch(exeAsset.browser_download_url, { redirect: "follow" })
+      if (!downloadRes.ok) {
+        const err = `Falha ao baixar (${downloadRes.status})`
+        log(err)
+        return { ok: false, error: err }
+      }
+      const { Readable } = require("stream")
+      const { pipeline } = require("stream/promises")
+      await pipeline(Readable.fromWeb(downloadRes.body), fs.createWriteStream(exePath))
+      log("Instalador baixado:", exePath)
+      send("update-download-done")
+      spawn(exePath, [], { detached: true, stdio: "ignore" }).unref()
+      setTimeout(() => app.quit(), 500)
+      return { ok: true }
+    } catch (err) {
+      log("Erro ao baixar/instalar atualização:", err.message)
+      send("update-error", err.message)
+      return { ok: false, error: err.message }
+    }
+  })
+
   try {
     await startNextServer()
     createWindow()

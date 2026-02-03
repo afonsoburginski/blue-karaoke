@@ -83,6 +83,8 @@ export function ConfiguracoesDialog({
   const [updateNotAvailable, setUpdateNotAvailable] = useState(false)
   /** Fallback: versão mais nova encontrada pela API do GitHub (quando electron-updater não acha) */
   const [updateFromApi, setUpdateFromApi] = useState<{ version: string; url: string } | null>(null)
+  /** Baixando instalador e executando (atualização interna) */
+  const [downloadingUpdate, setDownloadingUpdate] = useState(false)
 
   useEffect(() => {
     if (temLogPath && window.electron?.getLogPath) {
@@ -109,6 +111,7 @@ export function ConfiguracoesDialog({
     })
     window.electron.onUpdateError?.((message: string) => {
       setChecking(false)
+      setDownloadingUpdate(false)
       setUpdateError(message ?? "Erro ao verificar atualização.")
     })
   }, [temUpdater])
@@ -154,6 +157,22 @@ export function ConfiguracoesDialog({
 
   const handleReiniciarEInstalar = () => {
     window.electron?.quitAndInstall?.()
+  }
+
+  /** Atualização interna: baixar instalador da release e executar (app fecha e instalador roda) */
+  const handleAtualizarAgora = async () => {
+    if (!updateFromApi?.version || !window.electron?.downloadAndInstallUpdate) return
+    setDownloadingUpdate(true)
+    setUpdateError(null)
+    try {
+      const result = await window.electron.downloadAndInstallUpdate(updateFromApi.version)
+      if (!result?.ok) {
+        setUpdateError(result?.error ?? "Falha ao baixar atualização.")
+      }
+      // Se ok, o app vai fechar em breve (main process chama app.quit())
+    } finally {
+      setDownloadingUpdate(false)
+    }
   }
 
   return (
@@ -223,19 +242,38 @@ export function ConfiguracoesDialog({
                 </p>
               )}
               {updateFromApi && (
-                <div className="space-y-2 rounded-lg bg-emerald-950/40 border border-emerald-800/50 p-3">
+                <div className="space-y-3 rounded-lg bg-emerald-950/40 border border-emerald-800/50 p-3">
                   <p className="text-sm font-medium text-emerald-200">
                     Nova versão {updateFromApi.version} disponível
                   </p>
-                  <a
-                    href={updateFromApi.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-emerald-400 hover:underline"
-                  >
-                    <Download className="h-4 w-4" aria-hidden />
-                    Baixar no GitHub
-                  </a>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAtualizarAgora}
+                      disabled={downloadingUpdate}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-60 transition-colors"
+                    >
+                      {downloadingUpdate ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          Baixando e instalando…
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4" aria-hidden />
+                          Atualizar agora
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href={updateFromApi.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm text-emerald-400 hover:underline"
+                    >
+                      Abrir no GitHub
+                    </a>
+                  </div>
                 </div>
               )}
               {updateNotAvailable && !updateFromApi && (

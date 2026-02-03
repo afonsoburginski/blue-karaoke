@@ -15,6 +15,8 @@ declare global {
       onUpdateDownloaded?: (cb: (data: { version?: string }) => void) => void
       onUpdateError?: (cb: (message: string) => void) => void
       quitAndInstall?: () => Promise<void>
+      /** Baixar instalador da release e executar (atualização interna). */
+      downloadAndInstallUpdate?: (version: string) => Promise<{ ok: boolean; error?: string }>
     }
   }
 }

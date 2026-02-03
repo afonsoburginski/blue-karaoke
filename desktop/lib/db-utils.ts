@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm"
 import { localDb, musicasLocal, historicoLocal } from "./db/local-db"
-import { db, musicas, historico } from "./db"
 import { v4 as uuidv4 } from "uuid"
 import { syncAll } from "./sync"
 import { ensureLocalDbInitialized } from "./db/auto-init"
@@ -63,53 +62,15 @@ export async function salvarHistorico(codigo: string, musicaId?: string, userId?
 }
 
 /**
- * Busca todas as músicas (primeiro do local, depois do remoto)
+ * Busca todas as músicas do banco local (só as já baixadas)
  */
 export async function getAllMusicas(): Promise<Musica[]> {
-  // Garantir que o banco local está inicializado
   await ensureLocalDbInitialized()
-  // Buscar do banco local primeiro
   const localResult = await localDb.select().from(musicasLocal)
-
-  if (localResult.length > 0) {
-    return localResult.map((musica) => ({
-      codigo: musica.codigo,
-      artista: musica.artista,
-      titulo: musica.titulo,
-      arquivo: musica.arquivo,
-    }))
-  }
-
-  // Se não tem nada local, buscar do remoto
-  try {
-    const remoteResult = await db.select().from(musicas)
-
-    // Salvar localmente para cache
-    for (const musica of remoteResult) {
-      await localDb.insert(musicasLocal).values({
-        id: musica.id,
-        codigo: musica.codigo,
-        artista: musica.artista,
-        titulo: musica.titulo,
-        arquivo: musica.arquivo,
-        nomeArquivo: musica.nomeArquivo || null,
-        tamanho: musica.tamanho || null,
-        duracao: musica.duracao || null,
-        userId: musica.userId || null,
-        syncedAt: Date.now(),
-        createdAt: musica.createdAt.getTime(),
-        updatedAt: musica.updatedAt.getTime(),
-      }).onConflictDoNothing()
-    }
-
-    return remoteResult.map((musica) => ({
-      codigo: musica.codigo,
-      artista: musica.artista,
-      titulo: musica.titulo,
-      arquivo: musica.arquivo,
-    }))
-  } catch (error) {
-    console.error("Erro ao buscar músicas do remoto:", error)
-    return []
-  }
+  return localResult.map((musica) => ({
+    codigo: musica.codigo,
+    artista: musica.artista,
+    titulo: musica.titulo,
+    arquivo: musica.arquivo,
+  }))
 }

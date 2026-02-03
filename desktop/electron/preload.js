@@ -45,4 +45,6 @@ contextBridge.exposeInMainWorld("electron", {
   onUpdateError: (cb) => { onUpdateErrorCb = cb },
   /** Fechar e instalar atualização. */
   quitAndInstall: () => ipcRenderer.invoke("quit-and-install"),
+  /** Baixar instalador da release e executar (atualização interna quando electron-updater não acha). */
+  downloadAndInstallUpdate: (version) => ipcRenderer.invoke("download-and-install-update", version),
 })

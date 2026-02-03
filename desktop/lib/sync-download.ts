@@ -318,7 +318,7 @@ export async function downloadMusicasBatch(
 /**
  * Verifica se um arquivo de música existe localmente
  */
-function checkLocalFile(codigo: string): { exists: boolean; size: number } {
+export function checkLocalFile(codigo: string): { exists: boolean; size: number } {
   const downloadDir = getDownloadPath()
   const localPath = path.join(downloadDir, `${codigo}.mp4`)
   
@@ -334,7 +334,7 @@ function checkLocalFile(codigo: string): { exists: boolean; size: number } {
 }
 
 /**
- * Status offline: total = Supabase, offline = só as que têm arquivo (e estão no DB local).
+ * Status offline: total = Supabase, offline = músicas com arquivo no disco.
  */
 export async function getOfflineStatus(): Promise<{
   totalMusicas: number
@@ -346,24 +346,29 @@ export async function getOfflineStatus(): Promise<{
 
   const localMusicas = await localDb.select().from(musicasLocal)
   let storageUsed = 0
+  let musicasOffline = 0
+  
   for (const m of localMusicas) {
     const c = checkLocalFile(m.codigo)
-    if (c.exists) storageUsed += c.size
+    if (c.exists) {
+      musicasOffline++
+      storageUsed += c.size
+    }
   }
 
-  let totalMusicas = localMusicas.length
+  let totalMusicas = musicasOffline
   let musicasOnline = 0
   try {
     const remote = await db.select().from(musicas)
     totalMusicas = remote.length
-    musicasOnline = Math.max(0, totalMusicas - localMusicas.length)
+    musicasOnline = Math.max(0, totalMusicas - musicasOffline)
   } catch {
-    // offline: total = só local
+    // offline
   }
 
   return {
     totalMusicas,
-    musicasOffline: localMusicas.length,
+    musicasOffline,
     musicasOnline,
     storageUsed,
   }
