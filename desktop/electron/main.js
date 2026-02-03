@@ -264,18 +264,14 @@ function startNextServer() {
     try {
       console.log("Iniciando servidor Next.js...")
 
-      // Usar pasta do executável (onde o app está instalado) - igual em dev
-      const exePath = app.getPath("exe")
-      const appDir = path.dirname(exePath)
-      // Em produção empacotado, a pasta de dados fica junto com o executável
-      const dataDir = path.join(appDir, "data")
+      // Usar userData (AppData) para dados - Program Files não é gravável
+      const dataDir = app.getPath("userData")
       
       // Criar pasta de dados se não existir
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true })
       }
       
-      log("Pasta do executável:", exePath)
       log("Pasta de dados:", dataDir)
 
       const envFromFile = {}
@@ -386,14 +382,9 @@ function startNextServer() {
 
 // Aguardar Electron estar pronto
 app.whenReady().then(async () => {
-  // Criar pasta de logs dentro da pasta do executável (igual em dev)
+  // Criar pasta de logs dentro do userData (AppData)
   try {
-    const exePath = app.getPath("exe")
-    const appDir = path.dirname(exePath)
-    const dataDir = path.join(appDir, "data")
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true })
-    }
+    const dataDir = app.getPath("userData")
     logsDir = path.join(dataDir, "logs")
     fs.mkdirSync(logsDir, { recursive: true })
     const correctLogPath = path.join(logsDir, "blue-karaoke.log")
