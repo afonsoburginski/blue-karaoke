@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld("electron", {
   quit: () => ipcRenderer.invoke("app-quit"),
   /** Minimizar janela (Espaço). Só disponível no Electron. */
   minimize: () => ipcRenderer.invoke("app-minimize"),
+  /** Caminho do arquivo de log (pasta do app instalado). */
+  getLogPath: () => ipcRenderer.invoke("get-log-path"),
+  /** Abre a pasta de logs no explorador de arquivos. */
+  openLogFolder: () => ipcRenderer.invoke("open-log-folder"),
   /** Iniciar com Windows: obter estado. */
   getOpenAtLogin: () => ipcRenderer.invoke("get-open-at-login"),
   /** Iniciar com Windows: definir (true/false). */

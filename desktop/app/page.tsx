@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Spotlight } from "@/components/ui/spotlight-new"
@@ -14,7 +14,16 @@ import { QrCodesHome } from "@/components/qr-code"
 import { toast } from "sonner"
 import { Calendar, Clock, AlertCircle, Ban, Download, Settings } from "lucide-react"
 
-export default function HomePage() {
+function HomePageFallback() {
+  return (
+    <main className="min-h-screen relative overflow-hidden bg-black flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative z-10 w-12 h-12 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+    </main>
+  )
+}
+
+function HomePageContent() {
   const [codigo, setCodigo] = useState("")
   const [error, setError] = useState(false)
   const [isLoading, setIsLoading] = useState(false)

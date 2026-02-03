@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain } = require("electron")
+const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain, shell } = require("electron")
 const path = require("path")
 const { spawn } = require("child_process")
 const fs = require("fs")
@@ -17,15 +17,10 @@ if (app.isPackaged) {
   }
 }
 
-// Configurar logs em arquivo
-let logPath
-try {
-  logPath = path.join(app.getPath("userData"), "blue-karaoke.log")
-} catch (err) {
-  // Se app ainda não estiver pronto, usar temp
-  logPath = path.join(os.tmpdir(), "blue-karaoke.log")
-}
-const logStream = fs.createWriteStream(logPath, { flags: "a" })
+// Configurar logs em arquivo (pasta do app: userData/logs/)
+let logPath = path.join(os.tmpdir(), "blue-karaoke.log")
+let logStream = fs.createWriteStream(logPath, { flags: "a" })
+let logsDir = null // userData/logs (definido quando app estiver pronto)
 
 // Salvar console original antes de modificar
 const originalConsoleLog = console.log
@@ -346,19 +341,34 @@ function startNextServer() {
 
 // Aguardar Electron estar pronto
 app.whenReady().then(async () => {
-  // Atualizar logPath para o caminho correto do userData
+  // Criar pasta de logs dentro da pasta do app (userData) e passar a gravar lá
   try {
-    const correctLogPath = path.join(app.getPath("userData"), "blue-karaoke.log")
-    if (correctLogPath !== logPath) {
-      log("Caminho do log atualizado para:", correctLogPath)
-      logPath = correctLogPath
+    const userDataDir = app.getPath("userData")
+    logsDir = path.join(userDataDir, "logs")
+    fs.mkdirSync(logsDir, { recursive: true })
+    const correctLogPath = path.join(logsDir, "blue-karaoke.log")
+
+    // Se estávamos gravando em temp, copiar conteúdo para o arquivo definitivo
+    if (logPath !== correctLogPath && fs.existsSync(logPath)) {
+      try {
+        const tempContent = fs.readFileSync(logPath, "utf8")
+        fs.appendFileSync(correctLogPath, tempContent)
+      } catch (e) {
+        log("Aviso: não foi possível copiar logs iniciais para a pasta do app:", e.message)
+      }
     }
+
+    const oldStream = logStream
+    logStream = fs.createWriteStream(correctLogPath, { flags: "a" })
+    oldStream.end()
+    logPath = correctLogPath
+    log("Caminho do arquivo de log (pasta do app):", logPath)
   } catch (err) {
-    log("Não foi possível atualizar caminho do log:", err.message)
+    log("Não foi possível criar pasta de logs na pasta do app:", err.message)
   }
-  
+
   log("=== App pronto ===")
-  log("Caminho do arquivo de log:", logPath)
+  log("Todos os logs e erros são gravados em:", logPath)
   
   // Remover menu bar
   Menu.setApplicationMenu(null)
@@ -374,6 +384,15 @@ app.whenReady().then(async () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.minimize()
     }
+  })
+
+  /** Caminho do arquivo de log (pasta do app). */
+  ipcMain.handle("get-log-path", () => logPath || "")
+  /** Abre a pasta onde está o arquivo de log no explorador de arquivos. */
+  ipcMain.handle("open-log-folder", () => {
+    const dir = logsDir || (logPath ? path.dirname(logPath) : null)
+    if (dir && fs.existsSync(dir)) shell.openPath(dir).catch(() => {})
+    return {}
   })
 
   ipcMain.handle("get-open-at-login", () => {

@@ -4,6 +4,8 @@ declare global {
     electron?: {
       quit?: () => void
       minimize?: () => void
+      getLogPath?: () => Promise<string>
+      openLogFolder?: () => Promise<void>
       getOpenAtLogin?: () => Promise<{ openAtLogin: boolean }>
       setOpenAtLogin?: (openAtLogin: boolean) => Promise<void>
       getAppVersion?: () => Promise<string>

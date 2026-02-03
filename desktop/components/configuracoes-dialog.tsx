@@ -11,7 +11,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Kbd } from "@/components/ui/kbd"
-import { RefreshCw, Download, Loader2 } from "lucide-react"
+import { RefreshCw, Download, Loader2, FileText, FolderOpen } from "lucide-react"
 
 // Atualizações via electron-updater (GitHub Releases).
 
@@ -54,14 +54,22 @@ export function ConfiguracoesDialog({
   setOpenAtLogin,
 }: ConfiguracoesDialogProps) {
   const temElectron = typeof window !== "undefined" && window.electron?.getOpenAtLogin
+  const temLogPath = typeof window !== "undefined" && typeof window.electron?.getLogPath === "function"
   const temUpdater = typeof window !== "undefined" && typeof window.electron?.getAppVersion === "function"
 
   const [appVersion, setAppVersion] = useState<string>("")
+  const [logPath, setLogPath] = useState<string>("")
   const [checking, setChecking] = useState(false)
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null)
   const [updateDownloaded, setUpdateDownloaded] = useState<string | null>(null)
   const [updateError, setUpdateError] = useState<string | null>(null)
   const [updateNotAvailable, setUpdateNotAvailable] = useState(false)
+
+  useEffect(() => {
+    if (temLogPath && window.electron?.getLogPath) {
+      window.electron.getLogPath().then((p: string) => setLogPath(p || ""))
+    }
+  }, [temLogPath])
 
   useEffect(() => {
     if (!temUpdater || !window.electron?.getAppVersion) return
@@ -177,6 +185,33 @@ export function ConfiguracoesDialog({
               {updateError && (
                 <p className="text-sm text-destructive">{updateError}</p>
               )}
+            </div>
+          )}
+
+          {/* Arquivo de log (Electron) */}
+          {temLogPath && (
+            <div className="rounded-lg border p-4 space-y-2">
+              <p className="text-base font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" aria-hidden />
+                Logs e erros
+              </p>
+              <p className="text-sm text-muted-foreground">
+                O app grava todos os logs e erros em um arquivo na pasta do aplicativo. Você pode abrir a pasta para
+                ver o arquivo <code className="text-xs bg-muted px-1 rounded">blue-karaoke.log</code>.
+              </p>
+              {logPath && (
+                <p className="text-xs font-mono text-muted-foreground break-all bg-muted/50 rounded p-2">
+                  {logPath}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => window.electron?.openLogFolder?.()}
+                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-stone-800 text-white hover:bg-stone-700 transition-colors"
+              >
+                <FolderOpen className="h-4 w-4" aria-hidden />
+                Abrir pasta de logs
+              </button>
             </div>
           )}
 
