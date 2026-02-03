@@ -12,12 +12,13 @@ name: Release Desktop (Windows + Linux)
 permissions:
   contents: write
 
-# Push em main = release 1.0.run_number. Tag v* = use outro workflow ou Run workflow manual.
+# 1 commit = 1 build: push em main OU Actions → Run workflow manual
 on:
   push:
     branches:
       - main
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs: {}
 
 jobs:
   build-windows:
