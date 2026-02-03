@@ -255,16 +255,43 @@ function startNextServer() {
 
     try {
       console.log("Iniciando servidor Next.js...")
-      
-      // Executar servidor como processo separado (userData = pasta gravável para SQLite no release)
+
+      const userDataDir = app.getPath("userData")
+      const envFromFile = {}
+      for (const envFile of [".env", ".env.local", "env.txt"]) {
+        const envPath = path.join(userDataDir, envFile)
+        if (fs.existsSync(envPath)) {
+          try {
+            const content = fs.readFileSync(envPath, "utf8")
+            content.split("\n").forEach((line) => {
+              const trimmed = line.trim()
+              if (trimmed && !trimmed.startsWith("#")) {
+                const eqIndex = trimmed.indexOf("=")
+                if (eqIndex > 0) {
+                  const key = trimmed.slice(0, eqIndex).trim()
+                  const value = trimmed.slice(eqIndex + 1).trim().replace(/^["']|["']$/g, "")
+                  if (key) envFromFile[key] = value
+                }
+              }
+            })
+            log("Variáveis de ambiente carregadas de:", envPath)
+            break
+          } catch (e) {
+            log("Aviso: não foi possível ler", envPath, e.message)
+          }
+        }
+      }
+
+      // Executar servidor como processo separado (userData = pasta gravável para SQLite e musicas)
       const env = {
         ...process.env,
+        ...envFromFile,
         PORT: PORT.toString(),
         NODE_ENV: "production",
         ELECTRON_RUN_AS_NODE: "1",
-        BLUE_KARAOKE_USER_DATA: app.getPath("userData"),
+        BLUE_KARAOKE_USER_DATA: userDataDir,
       }
-      
+
       nextServer = spawn(process.execPath, [serverPath], {
         cwd: standaloneDir,
         env: env,

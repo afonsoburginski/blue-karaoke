@@ -4,8 +4,14 @@ import * as schema from "./schema"
 import * as dotenv from "dotenv"
 import path from "path"
 
-// Carregar .env.local
+// Carregar .env: em prod o Electron passa variáveis; senão tenta userData ou cwd
+const userData = process.env.BLUE_KARAOKE_USER_DATA
+if (userData) {
+  dotenv.config({ path: path.join(userData, ".env") })
+  dotenv.config({ path: path.join(userData, ".env.local") })
+}
 dotenv.config({ path: path.join(process.cwd(), ".env.local") })
+dotenv.config({ path: path.join(process.cwd(), ".env") })
 
 // Para Supabase: usar DATABASE_URL (pooler) para queries normais
 const DATABASE_URL = process.env.DATABASE_URL

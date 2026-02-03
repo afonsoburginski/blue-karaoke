@@ -6,8 +6,13 @@ import { ensureLocalDbInitialized } from "./db/auto-init"
 import path from "path"
 import fs from "fs"
 
-// Diretório para armazenar músicas baixadas
-const getDownloadPath = () => {
+// Diretório para armazenar músicas baixadas.
+// Em prod o Next roda em processo separado: Electron passa BLUE_KARAOKE_USER_DATA; usar esse path (gravável).
+const getDownloadPath = (): string => {
+  const userData = process.env.BLUE_KARAOKE_USER_DATA
+  if (userData) {
+    return path.join(userData, "musicas")
+  }
   if (process.env.NODE_ENV === "development") {
     return path.join(process.cwd(), "musicas")
   }

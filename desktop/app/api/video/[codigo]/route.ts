@@ -2,15 +2,21 @@ import { NextRequest, NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
 
+// Mesmo path do sync-download: em prod usa BLUE_KARAOKE_USER_DATA (passado pelo Electron).
+function getMusicasPath(): string {
+  const userData = process.env.BLUE_KARAOKE_USER_DATA
+  if (userData) return path.join(userData, "musicas")
+  return path.join(process.cwd(), "musicas")
+}
+
 // Servir vídeos locais da pasta musicas
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ codigo: string }> }
 ) {
   const { codigo } = await params
-  
-  // Caminho do arquivo de vídeo
-  const musicasPath = path.join(process.cwd(), "musicas")
+
+  const musicasPath = getMusicasPath()
   const videoPath = path.join(musicasPath, `${codigo}.mp4`)
   
   // Verificar se o arquivo existe
