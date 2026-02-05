@@ -5,24 +5,39 @@ import * as schema from "./local-schema"
 
 // Obter diretório de dados do usuário
 const getDataPath = () => {
-  if (process.env.NODE_ENV === "development") {
-    return path.join(process.cwd(), "db.sqlite")
-  }
-  // Em produção (release): Next.js roda em processo separado — usar env passado pelo Electron
+  const env = process.env.NODE_ENV
   const userData = process.env.BLUE_KARAOKE_USER_DATA
-  if (userData) {
-    return path.join(userData, "db.sqlite")
+  
+  console.log(`[LOCAL-DB] NODE_ENV: ${env}, BLUE_KARAOKE_USER_DATA: ${userData}`)
+  
+  if (env === "development") {
+    const devPath = path.join(process.cwd(), "db.sqlite")
+    console.log(`[LOCAL-DB] Usando caminho de desenvolvimento: ${devPath}`)
+    return devPath
   }
+  
+  // Em produção (release): Next.js roda em processo separado — usar env passado pelo Electron
+  if (userData) {
+    const prodPath = path.join(userData, "db.sqlite")
+    console.log(`[LOCAL-DB] Usando BLUE_KARAOKE_USER_DATA: ${prodPath}`)
+    return prodPath
+  }
+  
   // Fallback: tentar Electron no mesmo processo (não ocorre no release)
   try {
     const { app } = require("electron")
-    return path.join(app.getPath("userData"), "db.sqlite")
+    const fallbackPath = path.join(app.getPath("userData"), "db.sqlite")
+    console.log(`[LOCAL-DB] Usando Electron userData: ${fallbackPath}`)
+    return fallbackPath
   } catch {
-    return path.join(process.cwd(), "db.sqlite")
+    const cwdPath = path.join(process.cwd(), "db.sqlite")
+    console.log(`[LOCAL-DB] Usando cwd fallback: ${cwdPath}`)
+    return cwdPath
   }
 }
 
 const dbPath = getDataPath()
+console.log(`[LOCAL-DB] Caminho final do banco: ${dbPath}`)
 
 // Criar conexão SQLite
 const sqlite = new Database(dbPath)
