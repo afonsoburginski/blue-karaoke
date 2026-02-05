@@ -393,6 +393,26 @@ function startNextServer() {
   })
 }
 
+// Rotação de logs: limita tamanho máximo do arquivo (5MB)
+const MAX_LOG_SIZE = 5 * 1024 * 1024 // 5MB
+function rotateLogIfNeeded(logFilePath) {
+  try {
+    if (!fs.existsSync(logFilePath)) return
+    const stats = fs.statSync(logFilePath)
+    if (stats.size > MAX_LOG_SIZE) {
+      // Manter apenas as últimas linhas (aprox. 1MB)
+      const content = fs.readFileSync(logFilePath, "utf8")
+      const lines = content.split("\n")
+      const keepLines = Math.floor(lines.length / 5) // Manter ~20% das linhas
+      const trimmedContent = lines.slice(-keepLines).join("\n")
+      fs.writeFileSync(logFilePath, trimmedContent)
+      console.log(`Log rotacionado: ${(stats.size / 1024 / 1024).toFixed(2)}MB -> ${(trimmedContent.length / 1024 / 1024).toFixed(2)}MB`)
+    }
+  } catch (e) {
+    // Ignorar erros de rotação
+  }
+}
+
 // Aguardar Electron estar pronto
 app.whenReady().then(async () => {
   // Criar pasta de logs na pasta do executável (app portátil)
@@ -413,6 +433,9 @@ app.whenReady().then(async () => {
     logsDir = path.join(dataDir, "logs")
     fs.mkdirSync(logsDir, { recursive: true })
     const correctLogPath = path.join(logsDir, "blue-karaoke.log")
+    
+    // Rotacionar log se muito grande
+    rotateLogIfNeeded(correctLogPath)
 
     // Se estávamos gravando em temp, copiar conteúdo para o arquivo definitivo
     if (logPath !== correctLogPath && fs.existsSync(logPath)) {

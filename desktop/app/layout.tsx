@@ -8,6 +8,7 @@ import { EscQuitHandler } from "@/components/esc-quit-handler"
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 import { FilaProximaProvider } from "@/contexts/fila-proxima"
+import { AutoUpdater } from "@/components/auto-updater"
 
 import { Poppins, Inter as V0_Font_Inter, Geist_Mono as V0_Font_Geist_Mono, Source_Serif_4 as V0_Font_Source_Serif_4 } from 'next/font/google'
 
@@ -41,6 +42,7 @@ export default function RootLayout({
             {children}
             <SyncStatus />
             <Toaster />
+            <AutoUpdater />
             <Analytics />
           </FilaProximaProvider>
         </ThemeProvider>
