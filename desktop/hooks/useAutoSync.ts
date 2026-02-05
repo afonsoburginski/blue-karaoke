@@ -57,6 +57,21 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
   })
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Reindexar músicas que existem no disco mas não estão no banco
+  const reindexMusicas = useCallback(async () => {
+    try {
+      console.log("[AutoSync] Reindexando músicas no disco...")
+      const response = await fetch("/api/sync/reindex", { method: "POST" })
+      if (!response.ok) return
+      const data = await response.json()
+      if (data.reindexed > 0) {
+        console.log(`[AutoSync] ${data.reindexed} músicas reindexadas`)
+      }
+    } catch (error) {
+      console.error("[AutoSync] Erro ao reindexar:", error)
+    }
+  }, [])
+
   // Verificar status offline
   const checkOfflineStatus = useCallback(async () => {
     try {
@@ -231,16 +246,17 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
     window.addEventListener("online", handleOnline)
     window.addEventListener("offline", handleOffline)
 
-    // Verificar status inicial
+    // Verificar status inicial e reindexar músicas
     if (typeof navigator !== "undefined" && navigator.onLine) {
-      checkOfflineStatus()
+      // Primeiro reindexar músicas que existem no disco, depois verificar status
+      reindexMusicas().then(() => checkOfflineStatus())
     }
 
     return () => {
       window.removeEventListener("online", handleOnline)
       window.removeEventListener("offline", handleOffline)
     }
-  }, [checkOfflineStatus])
+  }, [checkOfflineStatus, reindexMusicas])
 
   // Verificar periodicamente o status offline
   useEffect(() => {
