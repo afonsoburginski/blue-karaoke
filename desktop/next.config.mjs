@@ -10,6 +10,8 @@ const nextConfig = {
   // Garantir que os caminhos funcionem no Electron
   basePath: "",
   assetPrefix: "",
+  // Desabilitar indicadores de desenvolvimento (bolinha do Next.js)
+  devIndicators: false,
   // Configuração do Webpack (usado para builds)
   webpack: (config, { isServer }) => {
     // Excluir módulos Node.js do bundle do cliente
