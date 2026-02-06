@@ -22,7 +22,7 @@ import {
   Play,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { CheckoutModal } from "@/components/checkout/checkout-modal"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
@@ -122,6 +122,14 @@ const stats = [
 ]
 
 export default function HomeMobile() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <HomeMobileContent />
+    </Suspense>
+  )
+}
+
+function HomeMobileContent() {
   const { user, isLoading: authLoading } = useAuth()
   const searchParams = useSearchParams()
   const [plans, setPlans] = useState<Plan[]>([])
