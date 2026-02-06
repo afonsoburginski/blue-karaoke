@@ -60,15 +60,11 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.version }}"
 
-          # package.json - somente a primeira ocorrencia de "version"
-          $pkg = Get-Content package.json -Raw
-          $pkg = $pkg -replace '("version":\s*")[^"]*"', "`${1}$version`"", 1
-          Set-Content package.json $pkg -NoNewline
+          # package.json
+          (Get-Content package.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
 
-          # tauri.conf.json - somente a primeira ocorrencia de "version"
-          $tauri = Get-Content src-tauri/tauri.conf.json -Raw
-          $tauri = $tauri -replace '("version":\s*")[^"]*"', "`${1}$version`"", 1
-          Set-Content src-tauri/tauri.conf.json $tauri -NoNewline
+          # tauri.conf.json
+          (Get-Content src-tauri/tauri.conf.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content src-tauri/tauri.conf.json
 
           # Cargo.toml - somente a linha que comeca com version (package version)
           $cargo = Get-Content src-tauri/Cargo.toml
