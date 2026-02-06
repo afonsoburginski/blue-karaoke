@@ -1,6 +1,6 @@
 {
   "name": "blue-karaoke",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sistema de Karaoke Blue Karaoke - Desktop Tauri",
   "private": true,
   "scripts": {
@@ -22,7 +22,9 @@
     "@radix-ui/react-toast": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.1.6",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lottie-react": "^2.4.1",

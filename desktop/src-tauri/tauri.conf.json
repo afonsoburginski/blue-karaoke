@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/refs/heads/dev/crates/tauri-utils/schema.json",
   "productName": "Blue Karaoke",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "com.bluekaraoke.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -26,6 +26,14 @@
         "enable": true,
         "scope": ["**"]
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU4NUJGQjM4M0U5NkQwNkEKUldScTBKWStPUHRiV09FU01EbWNxNDNKSFVNL1l2YndyZ2NEU2l1blpqbVpHcVNaaWlvbUN3djMK",
+      "endpoints": [
+        "https://github.com/afonsoburginski/blue-karaoke/releases/latest/download/latest.json"
+      ]
     }
   },
   "bundle": {

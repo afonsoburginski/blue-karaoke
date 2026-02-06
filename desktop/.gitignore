@@ -11,6 +11,9 @@ src-tauri/target/
 .env.*
 env.txt
 
+# Signing keys (NEVER commit)
+src-tauri/keys/
+
 # IDE
 .vscode/
 .idea/

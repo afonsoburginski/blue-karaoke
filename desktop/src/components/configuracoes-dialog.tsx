@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -6,7 +7,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Download, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { check } from "@tauri-apps/plugin-updater"
+import { relaunch } from "@tauri-apps/plugin-process"
 
 interface ConfiguracoesDialogProps {
   open: boolean
@@ -41,10 +44,70 @@ export function ConfiguracoesDialog({
   open,
   onOpenChange,
 }: ConfiguracoesDialogProps) {
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error">("idle")
+  const [updateMessage, setUpdateMessage] = useState("")
+  const [downloadProgress, setDownloadProgress] = useState(0)
 
   const handleSincronizar = () => {
     window.dispatchEvent(new CustomEvent("checkNewMusic"))
     onOpenChange(false)
+  }
+
+  const handleCheckUpdate = async () => {
+    setUpdateStatus("checking")
+    setUpdateMessage("Verificando atualizações...")
+    try {
+      const update = await check()
+      if (update) {
+        setUpdateStatus("available")
+        setUpdateMessage(`Nova versão ${update.version} disponível!`)
+      } else {
+        setUpdateStatus("up-to-date")
+        setUpdateMessage("Você já está na versão mais recente.")
+      }
+    } catch (err) {
+      console.error("[Updater] Error:", err)
+      setUpdateStatus("error")
+      setUpdateMessage(`Erro ao verificar: ${err}`)
+    }
+  }
+
+  const handleDownloadUpdate = async () => {
+    setUpdateStatus("downloading")
+    setUpdateMessage("Baixando atualização...")
+    setDownloadProgress(0)
+    try {
+      const update = await check()
+      if (!update) return
+
+      let downloaded = 0
+      let contentLength = 0
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started":
+            contentLength = event.data.contentLength ?? 0
+            setUpdateMessage(`Baixando... 0%`)
+            break
+          case "Progress":
+            downloaded += event.data.chunkLength
+            const pct = contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0
+            setDownloadProgress(pct)
+            setUpdateMessage(`Baixando... ${pct}%`)
+            break
+          case "Finished":
+            setUpdateMessage("Atualização pronta! Reiniciando...")
+            setUpdateStatus("ready")
+            break
+        }
+      })
+
+      // Relaunch the app after installation
+      await relaunch()
+    } catch (err) {
+      console.error("[Updater] Download error:", err)
+      setUpdateStatus("error")
+      setUpdateMessage(`Erro ao baixar: ${err}`)
+    }
   }
 
   return (
@@ -71,6 +134,90 @@ export function ConfiguracoesDialog({
               <RefreshCw className="h-4 w-4" aria-hidden />
               Sincronizar agora
             </button>
+          </div>
+
+          {/* Verificar atualização */}
+          <div className="rounded-lg border p-4">
+            <p className="text-base font-medium mb-1">Atualização do sistema</p>
+            <p className="text-sm text-muted-foreground mb-3">
+              Verifique se há uma nova versão disponível.
+            </p>
+            <div className="flex items-center gap-3">
+              {updateStatus === "idle" && (
+                <button
+                  type="button"
+                  onClick={handleCheckUpdate}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-cyan-700 text-white hover:bg-cyan-600 transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden />
+                  Verificar atualização
+                </button>
+              )}
+              {updateStatus === "checking" && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {updateMessage}
+                </div>
+              )}
+              {updateStatus === "up-to-date" && (
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircle className="h-4 w-4" />
+                  {updateMessage}
+                </div>
+              )}
+              {updateStatus === "available" && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-sm text-cyan-700">
+                    <Download className="h-4 w-4" />
+                    {updateMessage}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadUpdate}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-cyan-700 text-white hover:bg-cyan-600 transition-colors w-fit"
+                  >
+                    <Download className="h-4 w-4" aria-hidden />
+                    Baixar e instalar
+                  </button>
+                </div>
+              )}
+              {updateStatus === "downloading" && (
+                <div className="flex flex-col gap-2 w-full">
+                  <div className="flex items-center gap-2 text-sm text-cyan-700">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {updateMessage}
+                  </div>
+                  <div className="w-full bg-stone-200 rounded-full h-2">
+                    <div
+                      className="bg-cyan-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {updateStatus === "ready" && (
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircle className="h-4 w-4" />
+                  {updateMessage}
+                </div>
+              )}
+              {updateStatus === "error" && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-sm text-red-600">
+                    <AlertCircle className="h-4 w-4" />
+                    {updateMessage}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCheckUpdate}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-stone-800 text-white hover:bg-stone-700 transition-colors w-fit"
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden />
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Mapa de teclas e atalhos */}
