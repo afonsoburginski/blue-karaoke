@@ -60,14 +60,28 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.version }}"
 
-          # package.json
-          (Get-Content package.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
+          # package.json - somente a primeira ocorrencia de "version"
+          $pkg = Get-Content package.json -Raw
+          $pkg = $pkg -replace '("version":\s*")[^"]*"', "`${1}$version`"", 1
+          Set-Content package.json $pkg -NoNewline
 
-          # tauri.conf.json
-          (Get-Content src-tauri/tauri.conf.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content src-tauri/tauri.conf.json
+          # tauri.conf.json - somente a primeira ocorrencia de "version"
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw
+          $tauri = $tauri -replace '("version":\s*")[^"]*"', "`${1}$version`"", 1
+          Set-Content src-tauri/tauri.conf.json $tauri -NoNewline
 
-          # Cargo.toml
-          (Get-Content src-tauri/Cargo.toml) -replace 'version = "[^"]*"', "version = `"$version`"" | Set-Content src-tauri/Cargo.toml
+          # Cargo.toml - somente a linha que comeca com version (package version)
+          $cargo = Get-Content src-tauri/Cargo.toml
+          $replaced = $false
+          $cargo = $cargo | ForEach-Object {
+            if (-not $replaced -and $_ -match '^version\s*=') {
+              $replaced = $true
+              "version = `"$version`""
+            } else {
+              $_
+            }
+          }
+          Set-Content src-tauri/Cargo.toml $cargo
 
           echo "Versao atualizada para $version"
 
