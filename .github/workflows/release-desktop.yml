@@ -1,9 +1,11 @@
 # Publica release do Blue Karaoke Desktop (Tauri) no GitHub.
 #
 # Disparos:
-# 1) A cada push em main → nova release com versão 1.0.<run_number>
-# 2) Ao enviar uma tag v* → release com a versão da tag
-# 3) workflow_dispatch → build manual
+# 1) A cada push em main -> nova release com a versao definida nos arquivos fonte
+# 2) workflow_dispatch -> build manual
+#
+# A versao eh lida de tauri.conf.json. Para lancar uma nova versao,
+# basta atualizar a versao nos arquivos e fazer push.
 #
 # Builds: Windows (NSIS installer) e Linux (.deb + .AppImage).
 
@@ -26,9 +28,21 @@ jobs:
       run:
         working-directory: desktop
 
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Read version from tauri.conf.json
+        id: version
+        shell: pwsh
+        run: |
+          $conf = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $version = $conf.version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "Versao: $version"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,44 +56,6 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
-
-      - name: Set version
-        id: version
-        shell: pwsh
-        run: |
-          if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
-            $version = "${{ github.ref_name }}".TrimStart('v')
-          } else {
-            $version = "1.0.$env:GITHUB_RUN_NUMBER"
-          }
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-          echo "Versao: $version"
-
-      - name: Update versions
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-
-          # package.json
-          (Get-Content package.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
-
-          # tauri.conf.json
-          (Get-Content src-tauri/tauri.conf.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content src-tauri/tauri.conf.json
-
-          # Cargo.toml - somente a linha que comeca com version (package version)
-          $cargo = Get-Content src-tauri/Cargo.toml
-          $replaced = $false
-          $cargo = $cargo | ForEach-Object {
-            if (-not $replaced -and $_ -match '^version\s*=') {
-              $replaced = $true
-              "version = `"$version`""
-            } else {
-              $_
-            }
-          }
-          Set-Content src-tauri/Cargo.toml $cargo
-
-          echo "Versao atualizada para $version"
 
       - name: Create .env for Supabase credentials
         shell: pwsh
@@ -116,6 +92,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Read version from tauri.conf.json
+        id: version
+        run: |
+          version=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "Versao: $version"
+
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -140,40 +123,14 @@ jobs:
         with:
           workspaces: desktop/src-tauri
 
-      - name: Set version
-        id: version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version="1.0.${GITHUB_RUN_NUMBER}"
-          fi
-          echo "version=$version" >> $GITHUB_OUTPUT
-          echo "Versao: $version"
-
-      - name: Update versions
-        run: |
-          version="${{ steps.version.outputs.version }}"
-
-          # package.json
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$version\"/" package.json
-
-          # tauri.conf.json
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$version\"/" src-tauri/tauri.conf.json
-
-          # Cargo.toml
-          sed -i "s/^version = \"[^\"]*\"/version = \"$version\"/" src-tauri/Cargo.toml
-
-          echo "Versao atualizada para $version"
-
       - name: Create .env for Supabase credentials
         run: |
-          cat > src-tauri/.env << EOF
+          cat > src-tauri/.env << 'ENVEOF'
           NEXT_PUBLIC_SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.SUPABASE_ANON_KEY }}
           R2_PUBLIC_URL=${{ secrets.R2_PUBLIC_URL }}
-          EOF
+          ENVEOF
 
       - name: Install frontend dependencies
         run: npm install
@@ -202,14 +159,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set version and tag
+      - name: Read version
         id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version="1.0.${GITHUB_RUN_NUMBER}"
-          fi
+          version=$(grep '"version"' desktop/src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "tag=v$version" >> $GITHUB_OUTPUT
           echo "Versao: $version"
@@ -232,6 +185,12 @@ jobs:
           find win -type f 2>/dev/null || true
           echo "=== Linux ==="
           find linux -type f 2>/dev/null || true
+
+      - name: Deletar release anterior com mesma versao (se existir)
+        run: |
+          gh release delete "v${{ steps.version.outputs.version }}" --yes --cleanup-tag 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Criar Release e enviar instaladores
         uses: softprops/action-gh-release@v2

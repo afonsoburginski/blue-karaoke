@@ -16,7 +16,7 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir).ok();
             
             // Load env file for Supabase credentials
-            // In dev, also check project root
+            // Priority: 1) bundled resource dir, 2) data dir, 3) dev project root
             #[cfg(debug_assertions)]
             {
                 let dev_env = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".env");
@@ -27,7 +27,28 @@ pub fn run() {
                 }
             }
             #[cfg(not(debug_assertions))]
-            supabase::load_env_file(&data_dir);
+            {
+                // Try bundled resource directory first (included in installer)
+                if let Ok(resource_dir) = app.path().resource_dir() {
+                    let resource_env = resource_dir.join(".env");
+                    if resource_env.exists() {
+                        log::info!("Loading .env from resource dir: {}", resource_dir.display());
+                        supabase::load_env_file(&resource_dir.to_string_lossy());
+                    }
+                }
+                // Also try exe directory (portable mode)
+                if let Ok(exe_path) = std::env::current_exe() {
+                    if let Some(exe_dir) = exe_path.parent() {
+                        let exe_env = exe_dir.join(".env");
+                        if exe_env.exists() {
+                            log::info!("Loading .env from exe dir: {}", exe_dir.display());
+                            supabase::load_env_file(&exe_dir.to_string_lossy());
+                        }
+                    }
+                }
+                // Also try data directory
+                supabase::load_env_file(&data_dir);
+            }
             
             db::init_db(&data_dir).expect("Failed to initialize database");
             
