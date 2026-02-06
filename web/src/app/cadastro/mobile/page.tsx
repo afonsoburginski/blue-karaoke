@@ -12,6 +12,14 @@ import { Header } from "@/components/header/mobile"
 import { authClient } from "@/lib/auth-client"
 import { createSlug } from "@/lib/slug"
 
+interface Plan {
+  id: string
+  name: string
+  price: number
+  period: string
+  description: string
+}
+
 function CadastroMobileContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -25,6 +33,32 @@ function CadastroMobileContent() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+
+  // Buscar info do plano se veio com planId
+  useState(() => {
+    if (planId) {
+      fetch("/api/mercadopago/plans")
+        .then((res) => res.json())
+        .then((data) => {
+          const plan = (data.plans || []).find((p: Plan) => p.id === planId)
+          if (plan) setSelectedPlan(plan)
+        })
+        .catch(() => {})
+    }
+  })
+
+  const isCheckoutFlow = !!planId && redirect === "checkout"
+
+  const formatPrice = (price: number) =>
+    (price / 100).toFixed(2).replace(".", ",")
+
+  const getPeriodLabel = (period: string) => {
+    if (period === "mensal") return "mês"
+    if (period === "trimestral") return "trimestre"
+    if (period === "anual") return "ano"
+    return period
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -82,7 +116,7 @@ function CadastroMobileContent() {
                     }
                     // Se veio da página de preços com planId, redirecionar para preços com checkout
                     if (planId && redirect === "checkout") {
-                      navigateFast(router, `/preco?planId=${planId}&checkout=true`)
+                      navigateFast(router, `/?planId=${planId}&checkout=true`)
                     } else {
                       navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
                     }
@@ -168,7 +202,7 @@ function CadastroMobileContent() {
               // Se não tiver assinatura ativa, redirecionar para checkout
               // Se veio da página de preços com planId, redirecionar para preços com checkout
               if (planId && redirect === "checkout") {
-                navigateFast(router, `/preco?planId=${planId}&checkout=true`)
+                navigateFast(router, `/?planId=${planId}&checkout=true`)
               } else {
                 navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
               }
@@ -200,7 +234,7 @@ function CadastroMobileContent() {
 
         // Se veio da página de preços com planId, redirecionar para preços com checkout
         if (planId && redirect === "checkout") {
-          navigateFast(router, `/preco?planId=${planId}&checkout=true`)
+          navigateFast(router, `/?planId=${planId}&checkout=true`)
         } else {
           // Caso contrário, redirecionar para página de checkout
           navigateFast(router, `/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
@@ -226,11 +260,51 @@ function CadastroMobileContent() {
       <Header />
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4 pt-16 pb-8">
-        <Card className="w-full max-w-sm">
+        <div className="w-full max-w-sm space-y-3">
+          {/* Step indicator quando vem do checkout */}
+          {isCheckoutFlow && (
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <div className="flex items-center gap-1.5">
+                <div className="w-7 h-7 rounded-full bg-cyan-500 text-black text-xs font-bold flex items-center justify-center">
+                  1
+                </div>
+                <span className="text-white font-medium text-xs">Conta</span>
+              </div>
+              <div className="w-6 h-px bg-white/30" />
+              <div className="flex items-center gap-1.5">
+                <div className="w-7 h-7 rounded-full bg-white/20 text-white/50 text-xs font-bold flex items-center justify-center">
+                  2
+                </div>
+                <span className="text-white/50 text-xs">Pagamento</span>
+              </div>
+            </div>
+          )}
+
+          {/* Plano selecionado */}
+          {isCheckoutFlow && selectedPlan && (
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-3 text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-white/60">Plano selecionado</p>
+                  <p className="font-semibold text-sm">{selectedPlan.name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold">R$ {formatPrice(selectedPlan.price)}</p>
+                  <p className="text-[10px] text-white/60">/{getPeriodLabel(selectedPlan.period)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+        <Card className="w-full">
           <CardHeader className="space-y-1 px-4 pt-6">
-            <CardTitle className="text-xl font-bold">Criar conta</CardTitle>
+            <CardTitle className="text-xl font-bold">
+              {isCheckoutFlow ? "Crie sua conta" : "Criar conta"}
+            </CardTitle>
             <CardDescription className="text-sm">
-              Preencha os dados abaixo para criar sua conta
+              {isCheckoutFlow
+                ? "Crie sua conta para finalizar a assinatura"
+                : "Preencha os dados abaixo para criar sua conta"}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -302,15 +376,19 @@ function CadastroMobileContent() {
             <CardFooter className="flex flex-col space-y-3 px-4 pb-6">
               <Button
                 type="submit"
-                className="w-full h-10"
+                className={`w-full h-10 ${isCheckoutFlow ? "bg-cyan-500 hover:bg-cyan-400 text-black font-semibold" : ""}`}
                 disabled={isLoading}
               >
-                {isLoading ? "Criando conta..." : "Criar conta"}
+                {isLoading
+                  ? "Criando conta..."
+                  : isCheckoutFlow
+                    ? "Criar conta e pagar"
+                    : "Criar conta"}
               </Button>
               <div className="text-center text-xs text-muted-foreground">
                 Já tem uma conta?{" "}
                 <Link
-                  href="/login"
+                  href={isCheckoutFlow ? `/login?planId=${planId}&redirect=checkout` : "/login"}
                   className="text-primary hover:underline font-medium"
                 >
                   Entrar
@@ -319,6 +397,7 @@ function CadastroMobileContent() {
             </CardFooter>
           </form>
         </Card>
+        </div>
       </div>
     </main>
   )

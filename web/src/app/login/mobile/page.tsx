@@ -20,6 +20,10 @@ function LoginContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
+  const planId = searchParams.get("planId")
+  const redirect = searchParams.get("redirect")
+  const isCheckoutFlow = !!planId && redirect === "checkout"
+
   // Preencher email se vier da URL (ex: quando usuário já existe no cadastro)
   useEffect(() => {
     const emailParam = searchParams.get("email")
@@ -96,7 +100,11 @@ function LoginContent() {
             }
             
             // Se não tiver assinatura ou não estiver ativa, redirecionar para checkout
-            navigateFast(router, `/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
+            if (isCheckoutFlow) {
+              navigateFast(router, `/?planId=${planId}&checkout=true`)
+            } else {
+              navigateFast(router, `/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
+            }
             return
           }
         } catch (err) {
@@ -187,7 +195,7 @@ function LoginContent() {
               <div className="text-center text-xs text-muted-foreground">
                 Não tem uma conta?{" "}
                 <Link
-                  href="/cadastro"
+                  href={isCheckoutFlow ? `/cadastro?planId=${planId}&redirect=checkout` : "/cadastro"}
                   className="text-primary hover:underline font-medium"
                 >
                   Cadastre-se

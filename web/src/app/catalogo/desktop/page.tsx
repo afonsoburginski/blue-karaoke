@@ -82,17 +82,18 @@ export default function CatalogoDesktop() {
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="h-auto p-0 font-semibold hover:bg-transparent text-white hover:text-white/80"
+          className="h-auto p-0 font-bold hover:bg-transparent text-white hover:text-white/80 text-lg"
         >
           Código
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
       cell: ({ row }) => (
-        <code className="text-sm bg-white/10 text-[#409fff] px-2 py-1 rounded font-mono">
+        <code className="text-lg bg-white/10 text-[#409fff] px-3 py-1.5 rounded font-mono font-semibold">
           {row.getValue("codigo")}
         </code>
       ),
+      size: 120,
     },
     {
       accessorKey: "titulo",
@@ -100,14 +101,14 @@ export default function CatalogoDesktop() {
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="h-auto p-0 font-semibold hover:bg-transparent text-white hover:text-white/80"
+          className="h-auto p-0 font-bold hover:bg-transparent text-white hover:text-white/80 text-lg"
         >
           Música
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
       cell: ({ row }) => (
-        <div className="font-medium text-white">{row.getValue("titulo")}</div>
+        <div className="font-medium text-white text-lg">{row.getValue("titulo")}</div>
       ),
     },
     {
@@ -116,22 +117,23 @@ export default function CatalogoDesktop() {
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="h-auto p-0 font-semibold hover:bg-transparent text-white hover:text-white/80"
+          className="h-auto p-0 font-bold hover:bg-transparent text-white hover:text-white/80 text-lg"
         >
           Artista
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
       cell: ({ row }) => (
-        <div className="text-gray-300">{row.getValue("artista")}</div>
+        <div className="text-gray-300 text-lg">{row.getValue("artista")}</div>
       ),
     },
     {
       accessorKey: "duracao",
-      header: () => <span className="text-white">Duração</span>,
+      header: () => <span className="text-white text-lg font-bold">Duração</span>,
       cell: ({ row }) => (
-        <span className="text-gray-400">{formatDuration(row.getValue("duracao"))}</span>
+        <span className="text-gray-400 text-lg">{formatDuration(row.getValue("duracao"))}</span>
       ),
+      size: 100,
     },
   ], [])
 
@@ -191,7 +193,7 @@ export default function CatalogoDesktop() {
           <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
             Catálogo de Músicas
           </h1>
-          <p className="text-lg text-gray-300">
+          <p className="text-xl text-gray-300">
             Explore nosso catálogo com mais de {musics.length.toLocaleString('pt-BR')} músicas de karaokê
           </p>
         </div>
@@ -201,12 +203,12 @@ export default function CatalogoDesktop() {
       <section className="px-6 md:px-12 lg:px-20 pb-8">
         <div className="max-w-2xl mx-auto">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-6 w-6 text-gray-400" />
             <Input
               placeholder="Buscar por código, título ou artista..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              className="pl-12 h-14 text-lg rounded-xl bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#409fff]"
+              className="pl-13 h-16 text-xl rounded-xl bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#409fff]"
             />
             {searchTerm && (
               <Button
@@ -220,9 +222,9 @@ export default function CatalogoDesktop() {
             )}
           </div>
           {/* Stats */}
-          <div className="flex items-center justify-center gap-6 text-sm text-gray-400">
+          <div className="flex items-center justify-center gap-6 text-lg text-gray-400 mt-3">
             {debouncedSearchTerm && (
-              <div className="text-[#409fff] font-medium">
+              <div className="text-[#409fff] font-semibold">
                 {filteredData.length.toLocaleString('pt-BR')} resultado(s)
               </div>
             )}
@@ -246,7 +248,7 @@ export default function CatalogoDesktop() {
                       {table.getHeaderGroups().map((headerGroup) => (
                         <TableRow key={headerGroup.id} className="border-white/10 hover:bg-transparent">
                           {headerGroup.headers.map((header) => (
-                            <TableHead key={header.id} className="text-gray-400">
+                            <TableHead key={header.id} className="text-gray-400 py-4 px-5">
                               {header.isPlaceholder
                                 ? null
                                 : flexRender(
@@ -266,7 +268,7 @@ export default function CatalogoDesktop() {
                             className="border-white/10 hover:bg-white/5 transition-colors"
                           >
                             {row.getVisibleCells().map((cell) => (
-                              <TableCell key={cell.id}>
+                              <TableCell key={cell.id} className="py-4 px-5">
                                 {flexRender(
                                   cell.column.columnDef.cell,
                                   cell.getContext()
@@ -286,8 +288,8 @@ export default function CatalogoDesktop() {
                                 <Music className="h-8 w-8 text-gray-500" />
                               </div>
                               <div>
-                                <p className="font-medium text-white">Nenhuma música encontrada</p>
-                                <p className="text-sm text-gray-400">
+                                <p className="font-medium text-white text-xl">Nenhuma música encontrada</p>
+                                <p className="text-lg text-gray-400">
                                   Tente buscar por outro termo
                                 </p>
                               </div>
@@ -300,8 +302,8 @@ export default function CatalogoDesktop() {
                 </div>
 
                 {/* Pagination */}
-                <div className="flex items-center justify-between px-4 py-4 border-t border-white/10">
-                  <div className="text-sm text-gray-400">
+                <div className="flex items-center justify-between px-5 py-5 border-t border-white/10">
+                  <div className="text-lg text-gray-400">
                     Mostrando {table.getRowModel().rows.length} de {filteredData.length} músicas
                     {table.getPageCount() > 1 && (
                       <span className="ml-1">
@@ -313,15 +315,14 @@ export default function CatalogoDesktop() {
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
-                        size="sm"
                         onClick={() => table.previousPage()}
                         disabled={!table.getCanPreviousPage()}
-                        className="border-white/20 text-white hover:bg-white/10 disabled:opacity-50"
+                        className="border-white/20 text-white hover:bg-white/10 disabled:opacity-50 text-base h-10 px-4"
                       >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        <ChevronLeft className="h-5 w-5 mr-1" />
                         Anterior
                       </Button>
-                      <div className="hidden md:flex items-center gap-1">
+                      <div className="hidden md:flex items-center gap-1.5">
                         {Array.from({ length: Math.min(5, table.getPageCount()) }, (_, i) => {
                           const pageIndex = table.getState().pagination.pageIndex
                           const totalPages = table.getPageCount()
@@ -341,11 +342,10 @@ export default function CatalogoDesktop() {
                             <Button
                               key={page}
                               variant={page === pageIndex ? "default" : "outline"}
-                              size="sm"
                               onClick={() => table.setPageIndex(page)}
                               className={page === pageIndex 
-                                ? "bg-[#409fff] hover:bg-[#3090f0] text-white w-9" 
-                                : "border-white/20 text-white hover:bg-white/10 w-9"
+                                ? "bg-[#409fff] hover:bg-[#3090f0] text-white w-10 h-10 text-base" 
+                                : "border-white/20 text-white hover:bg-white/10 w-10 h-10 text-base"
                               }
                             >
                               {page + 1}
@@ -355,13 +355,12 @@ export default function CatalogoDesktop() {
                       </div>
                       <Button
                         variant="outline"
-                        size="sm"
                         onClick={() => table.nextPage()}
                         disabled={!table.getCanNextPage()}
-                        className="border-white/20 text-white hover:bg-white/10 disabled:opacity-50"
+                        className="border-white/20 text-white hover:bg-white/10 disabled:opacity-50 text-base h-10 px-4"
                       >
                         Próxima
-                        <ChevronRight className="h-4 w-4 ml-1" />
+                        <ChevronRight className="h-5 w-5 ml-1" />
                       </Button>
                     </div>
                   )}
@@ -379,17 +378,17 @@ export default function CatalogoDesktop() {
             <h2 className="text-3xl font-bold text-white mb-4">
               Quer cantar essas músicas?
             </h2>
-            <p className="text-gray-300 mb-8">
+            <p className="text-xl text-gray-300 mb-8">
               Cadastre-se e tenha acesso ao nosso catálogo completo de karaokê!
             </p>
             <div className="flex items-center justify-center gap-4">
               <Link href="/cadastro">
-                <Button size="lg" className="bg-[#409fff] hover:bg-[#3090f0] text-white px-8">
+                <Button size="lg" className="bg-[#409fff] hover:bg-[#3090f0] text-white px-10 text-lg h-13">
                   Começar Agora
                 </Button>
               </Link>
-              <Link href="/preco">
-                <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 px-8">
+              <Link href="/#planos">
+                <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 px-10 text-lg h-13">
                   Ver Planos
                 </Button>
               </Link>

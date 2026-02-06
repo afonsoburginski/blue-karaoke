@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, X, LogIn, UserPlus, DollarSign, Zap, ChevronRight, Music, LayoutDashboard } from "lucide-react"
+import { Menu, X, LogIn, UserPlus, DollarSign, ChevronRight, Music, LayoutDashboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -57,8 +57,8 @@ export function Header() {
 
   const navItems: Array<{ label: string; icon: typeof DollarSign; href?: string }> = [
     { label: "Músicas", icon: Music, href: "/catalogo" },
-    { label: "Preço", icon: DollarSign, href: "/preco" },
-    { label: "Recursos", icon: Zap, href: "/recursos" },
+    { label: "Preço", icon: DollarSign, href: "/#planos" },
+    { label: "Como Funciona", icon: Music, href: "/#como-funciona" },
   ]
 
   return (

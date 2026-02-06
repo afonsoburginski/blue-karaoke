@@ -22,6 +22,9 @@ import {
   LogOut,
   User,
   CreditCard,
+  Download,
+  Monitor,
+  Globe,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -49,6 +52,14 @@ interface SubscriptionData {
   chave?: string
 }
 
+interface ReleaseAssets {
+  version: string
+  windowsUrl: string | null
+  windowsFilename: string | null
+  linuxUrl: string | null
+  linuxFilename: string | null
+}
+
 export function DashboardSidebar({
   userName,
   userEmail,
@@ -60,6 +71,8 @@ export function DashboardSidebar({
   const { user } = useAuth()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true)
+  const [releases, setReleases] = useState<ReleaseAssets[]>([])
+  const [isLoadingReleases, setIsLoadingReleases] = useState(true)
 
   useEffect(() => {
     if (userRole === "user" && user?.id) {
@@ -112,6 +125,28 @@ export function DashboardSidebar({
       setIsLoadingSubscription(false)
     }
   }, [userRole, user?.id])
+
+  // Buscar releases para download (apenas para users com assinatura)
+  useEffect(() => {
+    if (userRole === "user") {
+      const fetchReleases = async () => {
+        try {
+          const res = await fetch("/api/latest-release")
+          if (res.ok) {
+            const data = await res.json()
+            setReleases(data.releases ?? [])
+          }
+        } catch (error) {
+          console.error("Erro ao buscar releases:", error)
+        } finally {
+          setIsLoadingReleases(false)
+        }
+      }
+      fetchReleases()
+    } else {
+      setIsLoadingReleases(false)
+    }
+  }, [userRole])
 
   const calculateDaysRemaining = (dataFim: string): number => {
     const endDate = new Date(dataFim)
@@ -275,6 +310,60 @@ export function DashboardSidebar({
                       {calculateDaysRemaining(subscription.dataFim)} dias
                     </p>
                   </div>
+                </CardContent>
+              </Card>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Card de Downloads - Apenas para usuários com role "user" */}
+        {userRole === "user" && !isLoadingReleases && releases.length > 0 && (
+          <SidebarGroup className="mt-2">
+            <SidebarGroupContent>
+              <Card className="border-sidebar-border bg-sidebar-accent/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Download className="h-4 w-4" />
+                    Baixar App
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {releases.map((release, index) => (
+                    <div key={release.version} className={index > 0 ? "border-t border-sidebar-border pt-3" : ""}>
+                      <p className="text-xs font-semibold text-foreground mb-2">
+                        v{release.version}
+                        {index === 0 && (
+                          <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                            Mais recente
+                          </span>
+                        )}
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {release.windowsUrl && (
+                          <a
+                            href={release.windowsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-sidebar-accent"
+                          >
+                            <Monitor className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span>Windows (.exe)</span>
+                          </a>
+                        )}
+                        {release.linuxUrl && (
+                          <a
+                            href={release.linuxUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-sidebar-accent"
+                          >
+                            <Globe className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span>Linux (.deb)</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             </SidebarGroupContent>

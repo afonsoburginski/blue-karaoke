@@ -77,32 +77,26 @@ export default function CatalogoMobile() {
   const columns = useMemo<ColumnDef<Musica>[]>(() => [
     {
       accessorKey: "codigo",
-      header: () => <span className="text-white text-xs">Cód.</span>,
+      header: () => <span className="text-white text-base font-bold">Cód.</span>,
       cell: ({ row }) => (
-        <code className="text-xs bg-white/10 text-[#409fff] px-1.5 py-0.5 rounded font-mono">
+        <code className="text-base bg-white/10 text-[#409fff] px-2.5 py-1 rounded font-mono font-semibold">
           {row.getValue("codigo")}
         </code>
       ),
+      size: 80,
     },
     {
       accessorKey: "titulo",
-      header: () => <span className="text-white text-xs">Música</span>,
+      header: () => <span className="text-white text-base font-bold">Música</span>,
       cell: ({ row }) => (
-        <div className="text-xs text-white truncate max-w-[120px]">{row.getValue("titulo")}</div>
+        <div className="text-base text-white truncate max-w-[45vw] font-medium">{row.getValue("titulo")}</div>
       ),
     },
     {
       accessorKey: "artista",
-      header: () => <span className="text-white text-xs">Artista</span>,
+      header: () => <span className="text-white text-base font-bold">Artista</span>,
       cell: ({ row }) => (
-        <div className="text-xs text-gray-300 truncate max-w-[100px]">{row.getValue("artista")}</div>
-      ),
-    },
-    {
-      accessorKey: "duracao",
-      header: () => <span className="text-white text-xs">Dur.</span>,
-      cell: ({ row }) => (
-        <span className="text-xs text-gray-400">{formatDuration(row.getValue("duracao"))}</span>
+        <div className="text-base text-gray-300 truncate max-w-[35vw]">{row.getValue("artista")}</div>
       ),
     },
   ], [])
@@ -160,10 +154,10 @@ export default function CatalogoMobile() {
       {/* Hero Section */}
       <section className="relative pt-20 pb-6 px-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">
+          <h1 className="text-3xl font-bold text-white mb-2">
             Catálogo de Músicas
           </h1>
-          <p className="text-sm text-gray-300">
+          <p className="text-lg text-gray-300">
             {musics.length.toLocaleString('pt-BR')} músicas disponíveis
           </p>
         </div>
@@ -172,18 +166,18 @@ export default function CatalogoMobile() {
       {/* Search Section */}
       <section className="px-4 pb-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <Input
-            placeholder="Buscar..."
+            placeholder="Buscar por código, título ou artista..."
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            className="pl-10 h-11 text-sm rounded-lg bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#409fff]"
+            className="pl-10 h-13 text-lg rounded-lg bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#409fff]"
           />
           {searchTerm && (
             <Button
               variant="ghost"
               size="sm"
-              className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white h-8 text-xs"
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white h-9 text-base"
               onClick={() => setSearchTerm("")}
             >
               Limpar
@@ -191,7 +185,7 @@ export default function CatalogoMobile() {
           )}
         </div>
         {debouncedSearchTerm && (
-          <p className="text-xs text-[#409fff] mt-2 text-center">
+          <p className="text-base text-[#409fff] mt-2 text-center font-semibold">
             {filteredData.length} resultado(s)
           </p>
         )}
@@ -212,7 +206,7 @@ export default function CatalogoMobile() {
                     {table.getHeaderGroups().map((headerGroup) => (
                       <TableRow key={headerGroup.id} className="border-white/10 hover:bg-transparent">
                         {headerGroup.headers.map((header) => (
-                          <TableHead key={header.id} className="text-gray-400 px-2 py-2">
+                          <TableHead key={header.id} className="text-gray-400 px-3 py-3.5">
                             {header.isPlaceholder
                               ? null
                               : flexRender(
@@ -232,7 +226,7 @@ export default function CatalogoMobile() {
                           className="border-white/10 hover:bg-white/5"
                         >
                           {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id} className="px-2 py-2">
+                            <TableCell key={cell.id} className="px-3 py-3.5">
                               {flexRender(
                                 cell.column.columnDef.cell,
                                 cell.getContext()
@@ -249,7 +243,7 @@ export default function CatalogoMobile() {
                         >
                           <div className="flex flex-col items-center gap-2">
                             <Music className="h-8 w-8 text-gray-500" />
-                            <p className="text-sm text-white">Nenhuma música</p>
+                            <p className="text-base text-white font-medium">Nenhuma música encontrada</p>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -259,31 +253,31 @@ export default function CatalogoMobile() {
               </div>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between px-3 py-3 border-t border-white/10">
-                <div className="text-xs text-gray-400">
-                  {table.getRowModel().rows.length}/{filteredData.length}
+              <div className="flex items-center justify-between px-4 py-4 border-t border-white/10">
+                <div className="text-base text-gray-400">
+                  {table.getRowModel().rows.length} de {filteredData.length}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => table.previousPage()}
                     disabled={!table.getCanPreviousPage()}
-                    className="text-white disabled:opacity-50 h-8 w-8 p-0"
+                    className="text-white disabled:opacity-50 h-10 w-10 p-0"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-6 w-6" />
                   </Button>
-                  <span className="text-xs text-gray-400">
-                    {table.getState().pagination.pageIndex + 1}/{table.getPageCount()}
+                  <span className="text-base text-gray-400 font-medium">
+                    {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => table.nextPage()}
                     disabled={!table.getCanNextPage()}
-                    className="text-white disabled:opacity-50 h-8 w-8 p-0"
+                    className="text-white disabled:opacity-50 h-10 w-10 p-0"
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-6 w-6" />
                   </Button>
                 </div>
               </div>
@@ -292,23 +286,22 @@ export default function CatalogoMobile() {
         </div>
       </section>
 
-      {/* CTA Section */}
       <section className="px-4 pb-8">
         <div className="bg-gradient-to-r from-[#409fff]/20 to-[#3090f0]/20 border border-[#409fff]/30 rounded-xl p-6 text-center">
-          <h2 className="text-lg font-bold text-white mb-2">
+          <h2 className="text-2xl font-bold text-white mb-2">
             Quer cantar?
           </h2>
-          <p className="text-sm text-gray-300 mb-4">
+          <p className="text-lg text-gray-300 mb-4">
             Cadastre-se e acesse o catálogo completo!
           </p>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <Link href="/cadastro" className="w-full">
-              <Button className="w-full bg-[#409fff] hover:bg-[#3090f0] text-white">
+              <Button className="w-full bg-[#409fff] hover:bg-[#3090f0] text-white text-lg h-12">
                 Começar Agora
               </Button>
             </Link>
-            <Link href="/preco" className="w-full">
-              <Button variant="outline" className="w-full border-white/20 text-white hover:bg-white/10">
+            <Link href="/#planos" className="w-full">
+              <Button variant="outline" className="w-full border-white/20 text-white hover:bg-white/10 text-lg h-12">
                 Ver Planos
               </Button>
             </Link>
