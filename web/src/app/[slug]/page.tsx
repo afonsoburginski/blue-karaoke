@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { navigateFast } from "@/lib/navigation"
-import { useAuth } from "@/hooks/use-auth"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   SidebarProvider,
@@ -29,42 +28,27 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Users, Music, HardDrive, DollarSign, TrendingUp, ArrowRight } from "lucide-react"
-import { useStorageUsage } from "@/hooks/use-storage-usage"
-import { useDashboardStats } from "@/hooks/use-dashboard-stats"
-import { useTopMusics } from "@/hooks/use-top-musics"
+import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useRealtimeDashboard } from "@/hooks/use-realtime-dashboard"
-import { authClient } from "@/lib/auth-client"
 
 export default function DashboardPage() {
   const router = useRouter()
   const params = useParams()
-  const { user, isLoading: authLoading } = useAuth()
   const queryClient = useQueryClient()
   const [slug, setSlug] = useState<string | null>(null)
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "year">("week")
-  const [newUsers, setNewUsers] = useState<any[]>([])
 
-  // Stats do dashboard (cacheadas)
-  const {
-    data: stats,
-    isLoading: statsLoading,
-    refetch: refetchStats,
-  } = useDashboardStats()
+  // Uma única requisição: user + stats + topMusics + storage + novosUsuarios (sem get-session antes)
+  const { data: dashboardData, isLoading: dashboardLoading, isError, error } = useDashboardData({
+    enabled: true,
+  })
 
-  // Músicas mais tocadas por período (cacheadas)
-  const {
-    data: topMusics,
-    isLoading: topMusicsLoading,
-    refetch: refetchTopMusics,
-  } = useTopMusics(timeFilter)
-
-  // Uso de storage (R2) com cache via React Query
-  const {
-    data: storageUsage,
-    isLoading: storageLoading,
-    refetch: refetchStorage,
-  } = useStorageUsage()
+  const user = dashboardData?.user
+  const stats = dashboardData?.stats
+  const topMusics = dashboardData?.topMusics ?? []
+  const storageUsage = dashboardData?.storageUsage
+  const newUsers = dashboardData?.novosUsuarios ?? []
 
   useEffect(() => {
     async function unwrapParams() {
@@ -74,147 +58,55 @@ export default function DashboardPage() {
     unwrapParams()
   }, [params])
 
+  // Redirecionar conforme resposta do dashboard (401/403) ou slug incorreto
   useEffect(() => {
-    // Não fazer nada enquanto está carregando
-    if (authLoading) {
-      return
-    }
-
-    // Aguardar um pouco para garantir que a sessão foi carregada completamente
-    // Isso evita redirecionamentos durante Fast Refresh ou atualizações de sessão
-    const timeoutId = setTimeout(() => {
-      const currentUser = user // Capturar valor atual
-      
-      if (!currentUser) {
+    if (dashboardLoading) return
+    if (isError && error) {
+      const msg = error.message || ""
+      if (msg.includes("Não autenticado")) {
         navigateFast(router, "/login")
         return
       }
-
-      // Verificar se é admin - apenas admins podem acessar dashboard
-      const userRole = currentUser.role || "user"
-      
-      if (userRole !== "admin") {
-        // Usuários com role "user" não podem acessar dashboard
-        // Redirecionar para o perfil
-        const currentSlug = currentUser?.slug
-        if (currentSlug) {
-          navigateFast(router, `/${currentSlug}/perfil`)
-        } else {
-          navigateFast(router, "/login")
-        }
+      if (msg.includes("Acesso negado")) {
+        navigateFast(router, slug ? `/${slug}/perfil` : "/login")
         return
       }
-
-      // Verificar slug antes de continuar
-      const currentSlug = currentUser?.slug
-      if (slug && currentSlug && currentSlug !== slug) {
-        navigateFast(router, `/${currentSlug}`)
-        return
+      return
+    }
+    if (!user || !slug) return
+    if (user.slug && user.slug !== slug) {
+      navigateFast(router, `/${user.slug}`)
+      return
+    }
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search)
+      if (searchParams.get("payment_success") === "true") {
+        window.history.replaceState({}, "", window.location.pathname)
       }
+    }
+  }, [dashboardLoading, isError, error, user, slug, router])
 
-      // Remover parâmetro de pagamento se existir
-      if (typeof window !== "undefined") {
-        const searchParams = new URLSearchParams(window.location.search)
-        const paymentSuccess = searchParams.get("payment_success")
-        
-        if (paymentSuccess === "true") {
-          // Remover o parâmetro da URL
-          const newUrl = window.location.pathname
-          window.history.replaceState({}, "", newUrl)
-        }
-      }
-
-      // Buscar novos usuários (apenas para admin)
-      // Aguardar um pouco mais para garantir que a sessão está completamente carregada
-      if (userRole === "admin" && currentUser) {
-        // Usar um timeout separado para não bloquear o resto do código
-        const fetchTimeoutId = setTimeout(() => {
-          fetch("/api/estatisticas/novos-usuarios?limit=5", {
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          })
-            .then((res) => {
-              if (!res.ok) {
-                // Se for 401 ou 403, não tentar novamente
-                if (res.status === 401 || res.status === 403) {
-                  return null
-                }
-                throw new Error(`HTTP error! status: ${res.status}`)
-              }
-              return res.json()
-            })
-            .then((data) => {
-              if (data && data.usuarios) {
-                setNewUsers(data.usuarios)
-              }
-            })
-            .catch((error) => {
-              // Silenciar erros de rede durante o carregamento inicial
-              // Apenas logar se não for um erro de rede comum
-              if (error.name !== "TypeError" || !error.message?.includes("Failed to fetch")) {
-                console.error("Erro ao buscar novos usuários:", error)
-              }
-            })
-        }, 500) // Aguardar 500ms após o timeout inicial
-        
-        // Limpar timeout se o componente for desmontado
-        return () => {
-          clearTimeout(fetchTimeoutId)
-        }
-      }
-    }, 100) // Pequeno delay para garantir que a sessão está estável
-
-    return () => clearTimeout(timeoutId)
-  }, [user, slug, authLoading, router])
-
-  // Callbacks memoizados para Realtime - atualizar cache granularmente
-  const handleHistoricoChange = useCallback(() => {
-    // Invalidar apenas queries relacionadas ao histórico
-    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
-    queryClient.invalidateQueries({ queryKey: ["dashboard", "topMusics"] })
+  const invalidateDashboard = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard", "data"] })
   }, [queryClient])
+
+  const handleHistoricoChange = useCallback(() => {
+    invalidateDashboard()
+  }, [invalidateDashboard])
 
   const handleMusicasChange = useCallback(() => {
-    // Invalidar apenas queries relacionadas a músicas
-    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
     queryClient.invalidateQueries({ queryKey: ["musicas"] })
-  }, [queryClient])
+    invalidateDashboard()
+  }, [queryClient, invalidateDashboard])
 
   const handleUsersChange = useCallback(() => {
-    if (user && user.role === "admin") {
-      // Buscar novos usuários apenas se necessário (não bloquear UI)
-      fetch("/api/estatisticas/novos-usuarios?limit=5", {
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`)
-          }
-          return res.json()
-        })
-        .then((data) => {
-          if (data.usuarios) {
-            setNewUsers(data.usuarios)
-          }
-        })
-        .catch((error) => {
-          // Não mostrar erro ao usuário, apenas logar
-        })
-    }
-    // Invalidar apenas queries relacionadas a usuários
-    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
     queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
-  }, [user, queryClient])
+    invalidateDashboard()
+  }, [queryClient, invalidateDashboard])
 
   const handleEstatisticasChange = useCallback(() => {
-    // Invalidar apenas estatísticas
-    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
-  }, [queryClient])
+    invalidateDashboard()
+  }, [invalidateDashboard])
 
   // Realtime para dashboard
   useRealtimeDashboard({
@@ -225,20 +117,18 @@ export default function DashboardPage() {
     onEstatisticasChange: handleEstatisticasChange,
   })
 
-  // Só mostrar loading se realmente não temos dados essenciais
-  // Não bloquear a UI se apenas algumas queries estão carregando
-  // Não mostrar loading durante navegação - React Query tem cache
-  // Só renderizar se temos user e slug, caso contrário deixar useEffect redirecionar silenciosamente
-  if (!user || !slug) {
-    return null // Redirecionamento silencioso sem loading
+  if (dashboardLoading || isError || !user) {
+    return null
   }
+
+  const currentSlug = slug ?? user.slug
 
   return (
     <SidebarProvider>
       <DashboardSidebar
         userName={user.name}
         userEmail={user.email}
-        slug={slug}
+        slug={currentSlug}
         userRole={user.role}
       />
       <SidebarInset>
@@ -283,25 +173,25 @@ export default function DashboardPage() {
                 <div className="flex flex-col gap-1">
                   <CardTitle className="text-sm font-medium">Total de GB</CardTitle>
                   <span className="text-[11px] text-muted-foreground">
-                    Banco + R2 (aprox.)
+                    Banco + Storage (aprox.)
                   </span>
                 </div>
                 <HardDrive className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {stats?.totalGb ? `${stats.totalGb.toFixed(1)} GB` : "0 GB"}
+                  {(Number(stats?.totalGb ?? 0) + Number(storageUsage?.totalGb ?? 0)).toFixed(2)} GB
                 </div>
                 {storageUsage && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    R2: {storageUsage.totalGb.toFixed(2)} GB em{" "}
+                    Storage: {Number(storageUsage.totalGb).toFixed(2)} GB em{" "}
                     {storageUsage.totalObjects.toLocaleString()} arquivos
                   </p>
                 )}
                 <button
                   type="button"
                   className="mt-2 text-[11px] text-primary underline-offset-2 hover:underline"
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ["storage", "usage"] })}
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ["dashboard", "data"] })}
                 >
                   Recarregar uso do storage
                 </button>
@@ -320,10 +210,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   className="mt-2 text-[11px] text-primary underline-offset-2 hover:underline"
-                  onClick={() => {
-                    queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] })
-                    queryClient.invalidateQueries({ queryKey: ["dashboard", "topMusics"] })
-                  }}
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ["dashboard", "data"] })}
                 >
                   Atualizar estatísticas
                 </button>
@@ -407,7 +294,7 @@ export default function DashboardPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigateFast(router, `/${slug}/admin/usuarios`)}
+                  onClick={() => navigateFast(router, `/${currentSlug}/admin/usuarios`)}
                   className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
                 >
                   Ver todos

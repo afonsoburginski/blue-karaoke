@@ -10,7 +10,7 @@ export interface StorageUsage {
 }
 
 /**
- * Hook React Query para buscar uso do bucket R2
+ * Hook React Query para buscar uso do Supabase Storage (bucket files)
  * Cache configurado globalmente no QueryClient:
  * - staleTime: Infinity (nunca marca como stale)
  * - gcTime: 24h (mantém em cache por 24h)

@@ -118,10 +118,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar limite de tempo para máquinas
-    if (tipo === "maquina" && !limiteTempo) {
+    // Validar limite (dias) para máquinas
+    if (tipo === "maquina" && (limiteTempo == null || limiteTempo === "")) {
       return NextResponse.json(
-        { error: "Limite de tempo é obrigatório para chaves de máquina" },
+        { error: "Limite em dias é obrigatório para chaves de máquina" },
         { status: 400 }
       )
     }
@@ -134,34 +134,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Se já existe chave para este usuário, atualizar ao invés de criar nova
+    // Se já existe chave para este usuário, atualizar (permite mudar tipo: assinatura ↔ maquina)
     if (userId) {
       const [existingKey] = await db
         .select()
         .from(chavesAtivacao)
-        .where(
-          and(
-            eq(chavesAtivacao.userId, userId),
-            eq(chavesAtivacao.tipo, tipo)
-          )
-        )
+        .where(eq(chavesAtivacao.userId, userId))
         .limit(1)
 
       if (existingKey) {
-        // Atualizar chave existente ao invés de criar nova
         const updateData: any = {
+          tipo,
           status: "ativa",
           updatedAt: new Date(),
         }
-        
-        if (tipo === "assinatura" && dataExpiracao) {
-          updateData.dataExpiracao = new Date(dataExpiracao)
+
+        if (tipo === "assinatura") {
+          updateData.dataExpiracao = dataExpiracao ? new Date(dataExpiracao) : null
+          updateData.limiteTempo = null
+          updateData.dataInicio = null
+        } else {
+          updateData.limiteTempo = limiteTempo != null ? parseInt(limiteTempo.toString(), 10) : null
+          updateData.dataExpiracao = null
+          // dataInicio permanece; ao trocar para máquina, dias restantes usam limiteTempo até primeiro uso
         }
-        
-        if (tipo === "maquina" && limiteTempo) {
-          updateData.limiteTempo = parseInt(limiteTempo.toString())
-        }
-        
+
         const [updatedChave] = await db
           .update(chavesAtivacao)
           .set(updateData)
@@ -213,7 +210,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criar chave
+    // Criar chave (máquina: limiteTempo em dias; assinatura: dataExpiracao)
     const [newChave] = await db
       .insert(chavesAtivacao)
       .values({
@@ -221,7 +218,7 @@ export async function POST(request: NextRequest) {
         userId: userId || null,
         tipo,
         status: "ativa",
-        limiteTempo: tipo === "maquina" ? limiteTempo : null,
+        limiteTempo: tipo === "maquina" ? parseInt(String(limiteTempo), 10) : null,
         dataExpiracao: tipo === "assinatura" ? new Date(dataExpiracao) : null,
         criadoPor: currentUser.userId,
       })
@@ -249,3 +246,110 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Deletar chave (apenas admin)
+export async function DELETE(request: NextRequest) {
+  try {
+    const currentUser = await getCurrentUser()
+    if (!currentUser) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.userId))
+      .limit(1)
+    if (!user || user.role !== "admin") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores." },
+        { status: 403 }
+      )
+    }
+    const id = request.nextUrl.searchParams.get("id")
+    if (!id) {
+      return NextResponse.json(
+        { error: "ID da chave é obrigatório" },
+        { status: 400 }
+      )
+    }
+    const [deleted] = await db
+      .delete(chavesAtivacao)
+      .where(eq(chavesAtivacao.id, id))
+      .returning({ id: chavesAtivacao.id })
+    if (!deleted) {
+      return NextResponse.json(
+        { error: "Chave não encontrada" },
+        { status: 404 }
+      )
+    }
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    console.error("Erro ao deletar chave:", error)
+    return NextResponse.json(
+      { error: "Erro ao deletar chave" },
+      { status: 500 }
+    )
+  }
+}
+
+// Editar dias restantes (apenas admin), tudo por dia
+export async function PATCH(request: NextRequest) {
+  try {
+    const currentUser = await getCurrentUser()
+    if (!currentUser) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.userId))
+      .limit(1)
+    if (!user || user.role !== "admin") {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas administradores." },
+        { status: 403 }
+      )
+    }
+    const body = await request.json()
+    const { id, diasRestantes } = body
+    if (!id || diasRestantes == null || typeof diasRestantes !== "number" || diasRestantes < 0) {
+      return NextResponse.json(
+        { error: "ID da chave e diasRestantes (número >= 0) são obrigatórios" },
+        { status: 400 }
+      )
+    }
+    const now = new Date()
+    const dataExpiracao = new Date(
+      now.getTime() + Math.floor(diasRestantes) * 24 * 60 * 60 * 1000
+    )
+    // Ao estender a chave, marcar como ativa se a nova expiração for no futuro
+    const status = diasRestantes > 0 ? "ativa" : "expirada"
+    const [updated] = await db
+      .update(chavesAtivacao)
+      .set({
+        dataExpiracao,
+        status,
+        updatedAt: now,
+      })
+      .where(eq(chavesAtivacao.id, id))
+      .returning()
+    if (!updated) {
+      return NextResponse.json(
+        { error: "Chave não encontrada" },
+        { status: 404 }
+      )
+    }
+    return NextResponse.json({
+      chave: {
+        id: updated.id,
+        dataExpiracao: updated.dataExpiracao,
+        diasRestantes: Math.floor(diasRestantes),
+      },
+    })
+  } catch (error) {
+    console.error("Erro ao editar chave:", error)
+    return NextResponse.json(
+      { error: "Erro ao editar chave" },
+      { status: 500 }
+    )
+  }
+}

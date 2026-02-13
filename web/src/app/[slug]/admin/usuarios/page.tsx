@@ -164,6 +164,9 @@ export default function AdminUsuariosPage() {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
+    const queryKey = ["admin", "usuarios", tipoFilter, statusFilter] as const
+    const previousUsuarios = queryClient.getQueryData<Usuario[]>(queryKey)
+
     try {
       const response = await fetch("/api/admin/usuarios", {
         method: "POST",
@@ -178,6 +181,30 @@ export default function AdminUsuariosPage() {
         return
       }
 
+      // Otimista: adicionar novo usuário na tabela na hora
+      const newUserFromApi = data.user
+      if (newUserFromApi) {
+        const optimisticUser: Usuario = {
+          id: newUserFromApi.id,
+          slug: newUserFromApi.slug,
+          name: newUserFromApi.name,
+          email: newUserFromApi.email,
+          avatar: null,
+          role: newUserFromApi.role,
+          userType: newUserFromApi.userType,
+          isActive: newUserFromApi.isActive ?? true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          assinatura: null,
+          chaveAtivacao: null,
+          diasRestantes: null,
+          dataAtivacao: null,
+        }
+        queryClient.setQueryData<Usuario[]>(queryKey, (old) =>
+          old ? [optimisticUser, ...old] : [optimisticUser]
+        )
+      }
+
       setDialogOpen(false)
       setFormData({
         name: "",
@@ -186,11 +213,13 @@ export default function AdminUsuariosPage() {
         userType: "subscriber",
         role: "user",
       })
-      // Invalidar cache do React Query E cache em memória
-      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
       memoryCache.invalidatePrefix("admin:usuarios")
+      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
       toast.success("Usuário criado com sucesso!")
     } catch (error) {
+      if (previousUsuarios) {
+        queryClient.setQueryData(queryKey, previousUsuarios)
+      }
       console.error("Erro ao criar usuário:", error)
       toast.error("Erro ao criar usuário")
     }
@@ -200,24 +229,84 @@ export default function AdminUsuariosPage() {
     e.preventDefault()
     if (!selectedUserId) return
 
+    if (keyFormData.tipo === "assinatura" && !keyFormData.dataExpiracao) {
+      toast.error("Data de expiração é obrigatória para assinaturas")
+      return
+    }
+    if (keyFormData.tipo === "maquina" && !keyFormData.limiteTempo) {
+      toast.error("Limite de tempo é obrigatório para máquinas")
+      return
+    }
+
+    const queryKey = ["admin", "usuarios", tipoFilter, statusFilter] as const
+    const previousUsuarios = queryClient.getQueryData<Usuario[]>(queryKey)
+    const editingKey = !!selectedUserChave
+
+    // Calcular dias restantes a partir do formulário
+    const dataExpiracaoStr =
+      keyFormData.tipo === "assinatura" ? keyFormData.dataExpiracao : null
+    const limiteTempoNum =
+      keyFormData.tipo === "maquina"
+        ? parseInt(keyFormData.limiteTempo, 10)
+        : null
+    const diasRestantes =
+      dataExpiracaoStr != null
+        ? Math.max(
+            0,
+            Math.ceil(
+              (new Date(dataExpiracaoStr).getTime() - Date.now()) /
+                (24 * 60 * 60 * 1000)
+            )
+          )
+        : limiteTempoNum
+
+    // Otimista: atualizar tabela na hora com dados do formulário
+    const optimisticChave = {
+      id: selectedUserChave?.id ?? `opt-${Date.now()}`,
+      chave: selectedUserChave?.chave ?? "••••••••••••",
+      tipo: keyFormData.tipo,
+      status: "ativa" as const,
+      dataExpiracao: dataExpiracaoStr ? new Date(dataExpiracaoStr).toISOString() : null,
+      usadoEm: null as Date | string | null,
+      ultimoUso: null as Date | string | null,
+      limiteTempo: limiteTempoNum ?? null,
+    }
+
+    queryClient.setQueryData<Usuario[]>(queryKey, (old) =>
+      old
+        ? old.map((u) =>
+            u.id === selectedUserId
+              ? {
+                  ...u,
+                  chaveAtivacao: optimisticChave,
+                  diasRestantes,
+                  dataAtivacao: u.dataAtivacao || new Date().toISOString(),
+                }
+              : u
+          )
+        : old
+    )
+
+    setCreateKeyDialogOpen(false)
+    setKeyFormData({
+      tipo: "assinatura",
+      dataExpiracao: "",
+      limiteTempo: "",
+    })
+    const userIdToSave = selectedUserId
+    setSelectedUserId(null)
+    setSelectedUserChave(null)
+    setIsEditingKey(false)
+
     try {
       const payload: any = {
         tipo: keyFormData.tipo,
-        userId: selectedUserId,
+        userId: userIdToSave,
       }
-
       if (keyFormData.tipo === "assinatura") {
-        if (!keyFormData.dataExpiracao) {
-          toast.error("Data de expiração é obrigatória para assinaturas")
-          return
-        }
         payload.dataExpiracao = keyFormData.dataExpiracao
       } else {
-        if (!keyFormData.limiteTempo) {
-          toast.error("Limite de tempo é obrigatório para máquinas")
-          return
-        }
-        payload.limiteTempo = parseInt(keyFormData.limiteTempo)
+        payload.limiteTempo = parseInt(keyFormData.limiteTempo, 10)
       }
 
       const response = await fetch("/api/admin/chaves", {
@@ -229,24 +318,48 @@ export default function AdminUsuariosPage() {
       const data = await response.json()
 
       if (!response.ok) {
+        if (previousUsuarios) {
+          queryClient.setQueryData(queryKey, previousUsuarios)
+        }
         toast.error(data.error || "Erro ao criar chave")
         return
       }
 
-      setCreateKeyDialogOpen(false)
-      setKeyFormData({
-        tipo: "assinatura",
-        dataExpiracao: "",
-        limiteTempo: "",
-      })
-      setSelectedUserId(null)
-      setSelectedUserChave(null)
-      setIsEditingKey(false)
-      // Invalidar cache do React Query E cache em memória
-      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
+      // Ajustar cache com resposta real (id e chave string)
+      const chave = data.chave
+      if (chave && userIdToSave) {
+        queryClient.setQueryData<Usuario[]>(queryKey, (old) =>
+          old
+            ? old.map((u) =>
+                u.id === userIdToSave
+                  ? {
+                      ...u,
+                      chaveAtivacao: {
+                        ...u.chaveAtivacao!,
+                        id: chave.id,
+                        chave: chave.chave,
+                        tipo: chave.tipo,
+                        status: chave.status ?? "ativa",
+                        dataExpiracao: chave.dataExpiracao ?? null,
+                        limiteTempo: chave.limiteTempo ?? null,
+                      },
+                    }
+                  : u
+              )
+            : old
+        )
+      }
+
       memoryCache.invalidatePrefix("admin:usuarios")
-      toast.success(data.message || (isEditingKey ? "Chave atualizada com sucesso!" : "Chave de ativação criada com sucesso!"))
+      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
+      toast.success(
+        data.message ||
+          (editingKey ? "Chave atualizada com sucesso!" : "Chave de ativação criada com sucesso!")
+      )
     } catch (error) {
+      if (previousUsuarios) {
+        queryClient.setQueryData(queryKey, previousUsuarios)
+      }
       console.error("Erro ao criar chave:", error)
       toast.error("Erro ao criar chave")
     }
@@ -288,25 +401,41 @@ export default function AdminUsuariosPage() {
   const handleDeleteUser = async () => {
     if (!userToDelete) return
 
+    const deletedUser = userToDelete
+    const queryKey = ["admin", "usuarios", tipoFilter, statusFilter] as const
+
+    // Otimista: remove da tabela na hora
+    const previousUsuarios = queryClient.getQueryData<Usuario[]>(queryKey)
+    queryClient.setQueryData<Usuario[]>(queryKey, (old) =>
+      old ? old.filter((u) => u.id !== deletedUser.id) : old
+    )
+    setDeleteDialogOpen(false)
+    setUserToDelete(null)
+
     try {
-      const response = await fetch(`/api/admin/delete-user?email=${encodeURIComponent(userToDelete.email)}`, {
+      const response = await fetch(`/api/admin/delete-user?email=${encodeURIComponent(deletedUser.email)}`, {
         method: "DELETE",
       })
 
       const data = await response.json()
 
       if (!response.ok) {
+        // Reverter em caso de erro
+        if (previousUsuarios) {
+          queryClient.setQueryData(queryKey, previousUsuarios)
+        }
         toast.error(data.error || "Erro ao deletar usuário")
         return
       }
 
-      setDeleteDialogOpen(false)
-      setUserToDelete(null)
-      // Invalidar cache do React Query E cache em memória
-      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
       memoryCache.invalidatePrefix("admin:usuarios")
-      toast.success(`Usuário ${userToDelete.name} deletado com sucesso!`)
+      queryClient.invalidateQueries({ queryKey: ["admin", "usuarios"] })
+      toast.success(`Usuário ${deletedUser.name} deletado com sucesso!`)
     } catch (error) {
+      // Reverter em caso de erro de rede
+      if (previousUsuarios) {
+        queryClient.setQueryData(queryKey, previousUsuarios)
+      }
       console.error("Erro ao deletar usuário:", error)
       toast.error("Erro ao deletar usuário")
     }
@@ -508,9 +637,9 @@ export default function AdminUsuariosPage() {
                 <DialogHeader>
                   <DialogTitle>{isEditingKey ? "Editar Chave de Ativação" : "Criar Chave de Ativação"}</DialogTitle>
                   <DialogDescription>
-                    {isEditingKey 
-                      ? "Edite a data de expiração ou limite de tempo da chave existente"
-                      : "Crie uma chave de ativação manualmente para o usuário selecionado"
+                    {isEditingKey
+                      ? "Altere o tipo (assinatura/máquina), data de expiração ou limite em dias da chave existente."
+                      : "Crie uma chave de ativação manualmente para o usuário selecionado."
                     }
                   </DialogDescription>
                 </DialogHeader>
@@ -522,7 +651,6 @@ export default function AdminUsuariosPage() {
                       onValueChange={(value) =>
                         setKeyFormData({ ...keyFormData, tipo: value as "assinatura" | "maquina" })
                       }
-                      disabled={isEditingKey}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -532,11 +660,9 @@ export default function AdminUsuariosPage() {
                         <SelectItem value="maquina">Máquina</SelectItem>
                       </SelectContent>
                     </Select>
-                    {isEditingKey && (
-                      <p className="text-xs text-muted-foreground">
-                        O tipo de chave não pode ser alterado
-                      </p>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Assinatura usa data de expiração; máquina usa limite em dias.
+                    </p>
                   </div>
 
                   {keyFormData.tipo === "assinatura" ? (
@@ -558,7 +684,7 @@ export default function AdminUsuariosPage() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Label htmlFor="limiteTempo">Limite de Tempo (horas)</Label>
+                      <Label htmlFor="limiteTempo">Limite (dias)</Label>
                       <Input
                         id="limiteTempo"
                         type="number"
@@ -568,10 +694,10 @@ export default function AdminUsuariosPage() {
                           setKeyFormData({ ...keyFormData, limiteTempo: e.target.value })
                         }
                         required
-                        placeholder="Ex: 720 (30 dias)"
+                        placeholder="Ex: 30"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Quantas horas a máquina poderá usar a chave
+                        Quantos dias a máquina poderá usar a chave
                       </p>
                     </div>
                   )}

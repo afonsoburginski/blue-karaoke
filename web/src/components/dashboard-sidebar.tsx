@@ -2,6 +2,8 @@
 
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { invalidateSessionQuery } from "@/hooks/use-auth"
 import {
   Sidebar,
   SidebarContent,
@@ -161,20 +163,21 @@ export function DashboardSidebar({
     return `${id.substring(0, 8).toUpperCase()}-${id.substring(id.length - 4).toUpperCase()}`
   }
 
+  const queryClient = useQueryClient()
+
   const handleLogout = async () => {
     try {
       const { authClient } = await import("@/lib/auth-client")
       await authClient.signOut()
+      invalidateSessionQuery(queryClient)
     } catch (error) {
       console.error("Erro ao fazer logout:", error)
     }
-    
     if (typeof window !== "undefined") {
       localStorage.removeItem("userEmail")
       localStorage.removeItem("userName")
       localStorage.removeItem("userSlug")
     }
-    
     router.push("/login")
   }
 

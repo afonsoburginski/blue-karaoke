@@ -122,9 +122,9 @@ export const chavesAtivacao = pgTable("chaves_ativacao", {
   userId: text("user_id").references(() => users.id), // Usuário associado (se for assinante)
   tipo: tipoChaveEnum("tipo").notNull().default("maquina"), // 'assinatura' ou 'maquina'
   status: text("status").notNull().default("ativa"), // 'ativa', 'expirada', 'revogada'
-  limiteTempo: integer("limite_tempo"), // Limite em horas (para máquinas)
+  limiteTempo: integer("limite_tempo"), // Limite em DIAS (para máquinas)
   dataInicio: timestamp("data_inicio"), // Quando começou a usar (para máquinas)
-  dataExpiracao: timestamp("data_expiracao"), // Data de expiração (para assinaturas)
+  dataExpiracao: timestamp("data_expiracao"), // Data de expiração (assinatura e máquina)
   criadoPor: text("criado_por").references(() => users.id).notNull(), // Admin que criou
   usadoEm: timestamp("usado_em"), // Quando foi usado pela primeira vez
   ultimoUso: timestamp("ultimo_uso"), // Última vez que foi usada

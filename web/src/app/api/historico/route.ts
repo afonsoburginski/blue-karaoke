@@ -57,8 +57,27 @@ export async function GET(request: NextRequest) {
 
     const history = await query.orderBy(desc(historico.dataExecucao)).limit(limit)
 
+    // Garantir dataExecucao como ISO string para o cliente
+    const historyNormalized = history.map((h) => ({
+      ...h,
+      dataExecucao:
+        h.dataExecucao instanceof Date
+          ? h.dataExecucao.toISOString()
+          : typeof h.dataExecucao === "string"
+            ? h.dataExecucao
+            : new Date(h.dataExecucao as number).toISOString(),
+      musica: h.musica
+        ? {
+            id: h.musica.id,
+            titulo: h.musica.titulo ?? "Desconhecida",
+            artista: h.musica.artista ?? "Desconhecido",
+            duracao: h.musica.duracao ?? null,
+          }
+        : null,
+    }))
+
     // Filtrar por data no cliente (temporário)
-    let filteredHistory = history
+    let filteredHistory = historyNormalized
     if (filter && filter !== "all") {
       const now = new Date()
       let startDate: Date
@@ -77,8 +96,8 @@ export async function GET(request: NextRequest) {
           startDate = new Date(0)
       }
 
-      filteredHistory = history.filter(
-        (item) => new Date(item.dataExecucao) >= startDate
+      filteredHistory = historyNormalized.filter(
+        (item) => new Date(item.dataExecucao).getTime() >= startDate.getTime()
       )
     }
 

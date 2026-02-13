@@ -131,7 +131,7 @@ async function main() {
       codigo: entry.codigo,
       artista: entry.artista,
       titulo: entry.musica,
-      arquivo: entry.arquivo, // aqui você pode futuramente trocar para a URL do R2
+      arquivo: entry.arquivo,
       nomeArquivo: entry.arquivo,
       tamanho: null,
       duracao: null,
@@ -144,7 +144,7 @@ async function main() {
   console.log("✅ Importação concluída!")
   console.log(`   → Importadas: ${imported} músicas novas`)
   console.log(`   → Ignoradas (já existiam): ${skipped} entradas`)
-  console.log("\nDica: depois você pode atualizar o campo 'arquivo' para apontar para a URL/KEY no R2.")
+  console.log("\nDica: o campo 'arquivo' deve conter a URL do Supabase Storage (ex: upload pela aplicação).")
 }
 
 main().catch((err) => {

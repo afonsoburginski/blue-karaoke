@@ -39,28 +39,16 @@ export const env = {
   // API
   API_BASE_URL: getEnv("API_BASE_URL", "http://localhost:3000/api"),
 
-  // Cloudflare R2 (S3 compatible)
-  R2_ACCOUNT_ID: getEnv("R2_ACCOUNT_ID"),
-  R2_ACCESS_KEY_ID: getEnv("R2_ACCESS_KEY_ID"),
-  R2_SECRET_ACCESS_KEY: getEnv("R2_SECRET_ACCESS_KEY"),
-  R2_BUCKET: getEnv("R2_BUCKET"),
-  R2_PUBLIC_URL: getEnv("R2_PUBLIC_URL"),
-  R2_ENDPOINT: getEnv(
-    "R2_ENDPOINT",
-    process.env.R2_ACCOUNT_ID
-      ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
-      : ""
-  ),
-  
   // Mercado Pago (usa .env.local em dev, .env em produção)
   MERCADOPAGO_ACCESS_TOKEN: process.env.MERCADOPAGO_ACCESS_TOKEN || "",
   MERCADOPAGO_CLIENT_ID: getEnv("MERCADOPAGO_CLIENT_ID", "5541138192357609"),
   MERCADOPAGO_CLIENT_SECRET: getEnv("MERCADOPAGO_CLIENT_SECRET", "KOgP19NHodGBLq4BgHrQF6gucgEVKCd7"),
   MERCADOPAGO_WEBHOOK_SECRET: getEnv("MERCADOPAGO_WEBHOOK_SECRET", "37168bd6010c5aa5b18040fc75c35ddb952db75bc4088b4745a0a908d6eefafd"),
   
-  // Supabase (para Realtime)
+  // Supabase (Realtime + Storage)
   SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   
   // Helpers
   isDevelopment: process.env.NODE_ENV === "development",

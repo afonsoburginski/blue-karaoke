@@ -187,7 +187,7 @@ async function main() {
   if (errors > 0) {
     console.log(`   → Erros: ${errors} entradas`)
   }
-  console.log("\nDica: depois você pode atualizar o campo 'arquivo' para apontar para a URL/KEY no R2.")
+  console.log("\nDica: o campo 'arquivo' deve conter a URL do Supabase Storage.")
 }
 
 main().catch((err) => {

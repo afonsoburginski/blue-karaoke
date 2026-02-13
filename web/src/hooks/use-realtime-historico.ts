@@ -20,6 +20,8 @@ interface HistoricoEntry {
 
 interface UseRealtimeHistoricoOptions {
   userId: string
+  /** Se true (ex.: admin), escuta todos os inserts/updates/deletes da tabela histórico, não só do userId */
+  subscribeAll?: boolean
   onInsert?: (entry: HistoricoEntry) => void
   onUpdate?: (entry: HistoricoEntry) => void
   onDelete?: (entry: { id: string }) => void
@@ -27,6 +29,7 @@ interface UseRealtimeHistoricoOptions {
 
 export function useRealtimeHistorico({
   userId,
+  subscribeAll = false,
   onInsert,
   onUpdate,
   onDelete,
@@ -48,18 +51,23 @@ export function useRealtimeHistorico({
   }, [onInsert, onUpdate, onDelete])
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId && !subscribeAll) return
+
+    const channelName = subscribeAll ? "historico:all" : `historico:${userId}`
+    const opts: { event: string; schema: string; table: string; filter?: string } = {
+      event: "*",
+      schema: "public",
+      table: "historico",
+    }
+    if (!subscribeAll && userId) {
+      opts.filter = `user_id=eq.${userId}`
+    }
 
     const channel = supabase
-      .channel(`historico:${userId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "historico",
-          filter: `user_id=eq.${userId}`,
-        },
+        opts,
         (payload: RealtimePostgresChangesPayload<any>) => {
           console.log("📡 Realtime histórico:", payload)
 
@@ -83,7 +91,7 @@ export function useRealtimeHistorico({
       console.log("🧹 Limpando canal Realtime histórico")
       supabase.removeChannel(channel)
     }
-  }, [userId]) // Apenas userId como dependência
+  }, [userId, subscribeAll])
 
   return { isConnected }
 }

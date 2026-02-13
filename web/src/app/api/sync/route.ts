@@ -72,25 +72,53 @@ export async function POST(request: NextRequest) {
     }
 
     if (tipo === "historico" || tipo === "completa") {
-      // Sincronizar histórico de reproduções
-      if (dados.historico && Array.isArray(dados.historico)) {
+      // userId: chave pode ser de máquina sem usuário; usar criadoPor para não perder histórico
+      const historicoUserId = chaveData.userId || chaveData.criadoPor
+      if (dados.historico && Array.isArray(dados.historico) && historicoUserId) {
         for (const item of dados.historico) {
-          // Buscar música pelo código
-          const [musica] = await db
+          const codigo = String(item.codigo ?? "").trim()
+          if (!codigo) continue
+
+          let [musica] = await db
             .select()
             .from(musicas)
-            .where(eq(musicas.codigo, item.codigo))
+            .where(eq(musicas.codigo, codigo))
             .limit(1)
 
-          if (musica && chaveData.userId) {
-            // Criar registro de histórico
-            await db.insert(historico).values({
-              userId: chaveData.userId,
-              musicaId: musica.id,
-              codigo: item.codigo,
-              dataExecucao: item.dataExecucao ? new Date(item.dataExecucao) : new Date(),
-            })
+          // Se a música não existir no catálogo, criar registro placeholder para não perder histórico
+          if (!musica) {
+            await db
+              .insert(musicas)
+              .values({
+                codigo,
+                artista: "–",
+                titulo: "Música não cadastrada",
+                arquivo: "",
+                userId: historicoUserId,
+              })
+              .onConflictDoNothing({ target: [musicas.codigo] })
+            const [aposInsert] = await db
+              .select()
+              .from(musicas)
+              .where(eq(musicas.codigo, codigo))
+              .limit(1)
+            musica = aposInsert ?? undefined
           }
+
+          if (!musica) continue
+
+          const dataExecucaoRaw = item.dataExecucao ?? item.data_execucao
+          const dataExecucao =
+            dataExecucaoRaw != null
+              ? new Date(typeof dataExecucaoRaw === "number" ? dataExecucaoRaw : dataExecucaoRaw)
+              : new Date()
+
+          await db.insert(historico).values({
+            userId: historicoUserId,
+            musicaId: musica.id,
+            codigo,
+            dataExecucao,
+          })
         }
       }
     }

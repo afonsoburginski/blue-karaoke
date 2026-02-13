@@ -117,23 +117,20 @@ export const auth = betterAuth({
 
 export type Session = typeof auth.$Infer.Session
 
-// Funções de compatibilidade com código existente
+/** Retorna o usuário atual (API routes e server). Better Auth usa cookie cache (5 min). */
 export async function getCurrentUser() {
   try {
     const { headers } = await import("next/headers")
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-    
-    if (!session?.user) {
-      return null
-    }
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (!session?.user) return null
 
-    // Retornar formato compatível
+    const user = session.user as { id: string; email: string; name?: string; slug?: string; role?: string }
     return {
-      userId: session.user.id,
-      email: session.user.email,
-      slug: (session.user as any).slug || (session.user.name || session.user.email.split("@")[0]).toLowerCase().replace(/\s+/g, "-"),
+      userId: user.id,
+      email: user.email,
+      name: user.name ?? "",
+      slug: user.slug || (user.name || user.email?.split("@")[0] || "").toLowerCase().replace(/\s+/g, "-"),
+      role: user.role ?? "user",
     }
   } catch {
     return null

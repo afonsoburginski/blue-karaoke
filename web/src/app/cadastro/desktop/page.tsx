@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { navigateFast } from "@/lib/navigation"
@@ -36,17 +36,21 @@ function CadastroDesktopContent() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
 
   // Buscar info do plano se veio com planId
-  useState(() => {
-    if (planId) {
-      fetch("/api/mercadopago/plans")
-        .then((res) => res.json())
-        .then((data) => {
-          const plan = (data.plans || []).find((p: Plan) => p.id === planId)
-          if (plan) setSelectedPlan(plan)
-        })
-        .catch(() => {})
+  useEffect(() => {
+    if (!planId) return
+    let cancelled = false
+    fetch("/api/mercadopago/plans")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        const plan = (data.plans || []).find((p: Plan) => p.id === planId)
+        if (plan) setSelectedPlan(plan)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
     }
-  })
+  }, [planId])
 
   const isCheckoutFlow = !!planId && redirect === "checkout"
 

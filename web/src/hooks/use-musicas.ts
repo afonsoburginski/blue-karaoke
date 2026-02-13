@@ -16,20 +16,11 @@ export interface Musica {
   updatedAt: string
 }
 
-interface MusicasResponse {
-  musicas: Musica[]
-}
+const CACHE_KEY = "musicas"
 
 /**
- * Hook React Query para buscar músicas
- * Cache configurado globalmente no QueryClient:
- * - staleTime: Infinity (nunca marca como stale)
- * - gcTime: 24h (mantém em cache por 24h)
- * - refetchOnMount: false (não refaz fetch ao remontar)
- * - refetchOnWindowFocus: false (não refaz fetch ao focar janela)
- *
- * Resultado: dados são buscados UMA VEZ e reutilizados em todas navegações
- * até serem invalidados manualmente via queryClient.invalidateQueries()
+ * Busca músicas: 1) cache em memória (sessão), 2) React Query (staleTime infinito).
+ * Invalidar com memoryCache.invalidatePrefix("musicas") + queryClient.invalidateQueries({ queryKey: ["musicas"] }).
  */
 export function useMusicas(options?: { enabled?: boolean }) {
   const { enabled = true } = options || {}
@@ -37,17 +28,23 @@ export function useMusicas(options?: { enabled?: boolean }) {
   return useQuery<Musica[]>({
     queryKey: ["musicas"],
     queryFn: async () => {
-      return memoryCache.get("musicas", async () => {
-        console.log('[useMusicas] 🔄 FETCHING from API')
-        const res = await fetch("/api/musicas")
-        if (!res.ok) {
-          throw new Error("Falha ao carregar músicas")
-        }
-        const data: MusicasResponse = await res.json()
-        console.log(`[useMusicas] ✅ API FETCH complete - ${data.musicas?.length || 0} músicas`)
-        return data.musicas || []
+      return memoryCache.get(CACHE_KEY, async () => {
+        const res = await fetch("/api/musicas?limit=1000", {
+          cache: "no-store",
+          credentials: "include",
+        })
+        if (!res.ok) throw new Error("Falha ao carregar músicas")
+        const data = await res.json()
+        const list = data.musicas ?? []
+        return list.map((m: Musica) => ({
+          ...m,
+          createdAt: typeof m.createdAt === "string" ? m.createdAt : (m.createdAt as Date)?.toISOString?.() ?? "",
+          updatedAt: typeof m.updatedAt === "string" ? m.updatedAt : (m.updatedAt as Date)?.toISOString?.() ?? "",
+        }))
       })
     },
     enabled,
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60 * 24, // 24h
   })
 }

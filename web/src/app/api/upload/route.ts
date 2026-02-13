@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
-import { uploadToR2 } from "@/lib/r2"
+import { uploadToStorage } from "@/lib/supabase-storage"
 import { db, musicas } from "@/lib/db"
 import { eq } from "drizzle-orm"
 
@@ -64,10 +64,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar tipo de arquivo
     const allowedTypes = ["video/mp4", "video/avi", "video/mov", "video/x-matroska", "video/quicktime"]
     if (!allowedTypes.some(type => file.type.includes(type.split("/")[1]) || file.type === type)) {
-      // Também aceita pelo nome do arquivo
       const ext = file.name.split(".").pop()?.toLowerCase()
       if (!["mp4", "avi", "mov", "mkv"].includes(ext || "")) {
         return NextResponse.json(
@@ -77,29 +75,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Converter File para Buffer
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    const overrideCodigo = formData.get("codigo") as string | null
+    const overrideArtista = formData.get("artista") as string | null
+    const overrideTitulo = formData.get("titulo") as string | null
+    const parsed = parseFilename(file.name)
+    const codigo = (overrideCodigo?.trim() || parsed.codigo) || "sem-codigo"
+    const artista = (overrideArtista?.trim() || parsed.artista) || "Desconhecido"
+    const titulo = (overrideTitulo?.trim() || parsed.titulo) || file.name
 
-    // Parse do nome do arquivo
-    const { codigo, artista, titulo } = parseFilename(file.name)
+    // Em paralelo: ler arquivo e verificar se código já existe (reduz tempo total)
+    const [buffer, existingRows] = await Promise.all([
+      file.arrayBuffer().then((bytes) => Buffer.from(bytes)),
+      db.select({ id: musicas.id }).from(musicas).where(eq(musicas.codigo, codigo)).limit(1),
+    ])
 
-    // Verificar se código já existe
-    const existing = await db
-      .select()
-      .from(musicas)
-      .where(eq(musicas.codigo, codigo))
-      .limit(1)
-
-    if (existing.length > 0) {
+    if (existingRows.length > 0) {
       return NextResponse.json(
         { error: `Código "${codigo}" já existe no catálogo` },
         { status: 400 }
       )
     }
 
-    // Upload para R2
-    const uploadResult = await uploadToR2(
+    const uploadResult = await uploadToStorage(
       buffer,
       file.name,
       file.type || "video/mp4"

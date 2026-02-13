@@ -6,33 +6,35 @@ import { hashPassword } from "@/lib/auth"
 import { createSlug } from "@/lib/slug"
 import { createId } from "@paralleldrive/cuid2"
 
+// Colunas de usuário necessárias para a listagem (menos payload)
+const userListColumns = {
+  id: users.id,
+  slug: users.slug,
+  name: users.name,
+  email: users.email,
+  avatar: users.avatar,
+  role: users.role,
+  userType: users.userType,
+  isActive: users.isActive,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+}
+
 // Listar todos os usuários (apenas admin)
 export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser()
-
     if (!currentUser) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
-    // Buscar usuário completo para verificar role
-    const [user] = await db
-      .select()
+    const [adminRow] = await db
+      .select({ role: users.role })
       .from(users)
       .where(eq(users.id, currentUser.userId))
       .limit(1)
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Usuário não encontrado" },
-        { status: 404 }
-      )
-    }
-
-    if (user.role !== "admin") {
+    if (!adminRow || adminRow.role !== "admin") {
       return NextResponse.json(
         { error: "Acesso negado. Apenas administradores." },
         { status: 403 }
@@ -40,69 +42,47 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams
-    const tipo = searchParams.get("tipo") // 'subscriber', 'machine', 'all'
-    const status = searchParams.get("status") // 'active', 'inactive', 'all'
+    const tipo = searchParams.get("tipo")
+    const status = searchParams.get("status")
 
-    // Buscar todos os usuários com LEFT JOIN para assinaturas e chaves
     const conditions = []
+    if (tipo && tipo !== "all") conditions.push(eq(users.userType, tipo))
+    if (status && status !== "all") conditions.push(eq(users.isActive, status === "active"))
 
-    if (tipo && tipo !== "all") {
-      conditions.push(eq(users.userType, tipo))
-    }
-
-    if (status && status !== "all") {
-      conditions.push(eq(users.isActive, status === "active"))
-    }
-
-    // Buscar usuários primeiro
-    // Os índices idx_users_type_active e idx_users_role otimizam estas queries
-    let usersQuery = db
-      .select()
-      .from(users)
-
+    let usersQuery = db.select(userListColumns).from(users)
     if (conditions.length > 0) {
       usersQuery = usersQuery.where(and(...conditions)) as typeof usersQuery
     }
-
     const allUsersData = await usersQuery.orderBy(desc(users.createdAt))
 
-    // Otimizar: buscar todas as assinaturas e chaves de uma vez usando inArray
-    // Os índices idx_assinaturas_user_created e idx_chaves_user_created otimizam estas queries
-    const userIds = allUsersData.map(u => u.id)
-    
-    // Buscar todas as assinaturas relevantes de uma vez
-    const allAssinaturas = userIds.length > 0 ? await db
-      .select()
-      .from(assinaturas)
-      .where(inArray(assinaturas.userId, userIds))
-      .orderBy(desc(assinaturas.createdAt)) : []
+    const userIds = allUsersData.map((u) => u.id)
 
-    // Buscar todas as chaves relevantes de uma vez
-    // Buscar chaves onde userId está na lista OU é null (chaves não associadas ainda)
-    const allChaves = userIds.length > 0 ? await db
-      .select()
-      .from(chavesAtivacao)
-      .where(inArray(chavesAtivacao.userId, userIds))
-      .orderBy(desc(chavesAtivacao.createdAt)) : []
+    // Assinaturas e chaves em paralelo (reduz tempo total)
+    const [allAssinaturas, allChaves] =
+      userIds.length > 0
+        ? await Promise.all([
+            db
+              .select()
+              .from(assinaturas)
+              .where(inArray(assinaturas.userId, userIds))
+              .orderBy(desc(assinaturas.createdAt)),
+            db
+              .select()
+              .from(chavesAtivacao)
+              .where(inArray(chavesAtivacao.userId, userIds))
+              .orderBy(desc(chavesAtivacao.createdAt)),
+          ])
+        : [[], []]
 
 
-    // Criar mapas para acesso rápido O(1)
-    const assinaturasMap = new Map<string, typeof allAssinaturas[0]>()
+    const assinaturasMap = new Map<string, (typeof allAssinaturas)[number]>()
     for (const assinatura of allAssinaturas) {
-      if (!assinaturasMap.has(assinatura.userId)) {
-        assinaturasMap.set(assinatura.userId, assinatura)
-      }
+      if (!assinaturasMap.has(assinatura.userId)) assinaturasMap.set(assinatura.userId, assinatura)
     }
 
-    const chavesMap = new Map<string, typeof allChaves[0]>()
+    const chavesMap = new Map<string, (typeof allChaves)[number]>()
     for (const chave of allChaves) {
-      // Garantir que userId existe e usar a chave mais recente (já ordenado por createdAt DESC)
-      if (chave.userId) {
-        // Se já existe uma chave para este userId, manter a mais recente (primeira do array ordenado)
-        if (!chavesMap.has(chave.userId)) {
-          chavesMap.set(chave.userId, chave)
-        }
-      }
+      if (chave.userId && !chavesMap.has(chave.userId)) chavesMap.set(chave.userId, chave)
     }
 
 
@@ -113,7 +93,7 @@ export async function GET(request: NextRequest) {
         const chave = chavesMap.get(user.id) || null
         
 
-        // Calcular dias restantes
+        // Calcular dias restantes e data ativação
         let diasRestantes: number | null = null
         let dataAtivacao: Date | null = null
 
@@ -124,13 +104,28 @@ export async function GET(request: NextRequest) {
           diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
           if (diasRestantes < 0) diasRestantes = 0
           dataAtivacao = assinatura.dataInicio ? new Date(assinatura.dataInicio) : null
-        } else if (chave?.dataExpiracao) {
-          const hoje = new Date()
-          const dataFim = new Date(chave.dataExpiracao)
-          const diffTime = dataFim.getTime() - hoje.getTime()
-          diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-          if (diasRestantes < 0) diasRestantes = 0
-          dataAtivacao = chave.usadoEm ? new Date(chave.usadoEm) : null
+        } else if (chave) {
+          if (chave.dataExpiracao) {
+            // Assinatura ou chave com data fixa
+            const hoje = new Date()
+            const dataFim = new Date(chave.dataExpiracao)
+            const diffTime = dataFim.getTime() - hoje.getTime()
+            diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            if (diasRestantes < 0) diasRestantes = 0
+            dataAtivacao = chave.usadoEm ? new Date(chave.usadoEm) : null
+          } else if (chave.tipo === "maquina" && chave.limiteTempo != null) {
+            // Máquina: dias = até dataInicio + limiteTempo, ou limiteTempo se ainda não usou
+            if (chave.dataInicio) {
+              const inicio = new Date(chave.dataInicio).getTime()
+              const fim = inicio + chave.limiteTempo * 24 * 60 * 60 * 1000
+              const hoje = Date.now()
+              diasRestantes = Math.max(0, Math.ceil((fim - hoje) / (24 * 60 * 60 * 1000)))
+              dataAtivacao = new Date(chave.dataInicio)
+            } else {
+              diasRestantes = chave.limiteTempo
+              dataAtivacao = null
+            }
+          }
         }
 
         return {
@@ -161,6 +156,7 @@ export async function GET(request: NextRequest) {
             dataExpiracao: chave.dataExpiracao,
             usadoEm: chave.usadoEm,
             ultimoUso: chave.ultimoUso,
+            limiteTempo: chave.limiteTempo,
           } : null,
           diasRestantes,
           dataAtivacao,
@@ -187,8 +183,14 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const totalUsuarios = usersWithDetails.length
-    return NextResponse.json({ usuarios: usersWithDetails })
+    return NextResponse.json(
+      { usuarios: usersWithDetails },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+        },
+      }
+    )
   } catch (error) {
     console.error("Erro ao buscar usuários:", error)
     return NextResponse.json(

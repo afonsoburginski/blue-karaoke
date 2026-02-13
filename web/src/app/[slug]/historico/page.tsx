@@ -113,9 +113,10 @@ export default function HistoricoPage() {
     memoryCache.invalidatePrefix("historico")
   }, [queryClient, timeFilter])
 
-  // Realtime para histórico
+  // Realtime para histórico (admin escuta todos os usuários para atualizar a lista ao sincronizar desktop)
   useRealtimeHistorico({
     userId: user?.id || "",
+    subscribeAll: user?.role === "admin",
     onInsert: handleInsert,
     onUpdate: handleUpdate,
     onDelete: handleDelete,
@@ -138,8 +139,9 @@ export default function HistoricoPage() {
 
   const getTotalMinutes = (): number => {
     return history.reduce((acc, entry) => {
-      const duration = entry.musica?.duracao || 0
-      return acc + duration
+      const duration = entry.musica?.duracao
+      const sec = typeof duration === "number" && !Number.isNaN(duration) ? duration : 0
+      return acc + sec
     }, 0)
   }
 
@@ -342,7 +344,7 @@ export default function HistoricoPage() {
                       </TableHeader>
                       <TableBody>
                         {mostPlayed.map((item, index) => (
-                          <TableRow key={item.musicaId}>
+                          <TableRow key={item.musicaId ?? `${item.codigo}-${index}`}>
                             <TableCell className="font-medium">{index + 1}</TableCell>
                             <TableCell>
                               <div className="font-medium">{item.titulo}</div>

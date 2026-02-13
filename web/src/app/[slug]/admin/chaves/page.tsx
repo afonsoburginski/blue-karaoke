@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Key, Copy, CheckCircle2 } from "lucide-react"
+import { Plus, Copy, CheckCircle2, Trash2, Pencil } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Dialog,
@@ -77,6 +77,11 @@ export default function AdminChavesPage() {
     limiteTempo: "",
     dataExpiracao: "",
   })
+  const [editDiasOpen, setEditDiasOpen] = useState(false)
+  const [editChave, setEditChave] = useState<Chave | null>(null)
+  const [editDiasValue, setEditDiasValue] = useState("")
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [isPatching, setIsPatching] = useState(false)
 
   useEffect(() => {
     async function unwrapParams() {
@@ -104,14 +109,17 @@ export default function AdminChavesPage() {
     }
   }, [user, slug, authLoading, isRoleLoading, router, tipoFilter, statusFilter])
 
-  const fetchChaves = async () => {
+  const fetchChaves = async (bustCache = false) => {
     try {
       setIsLoading(true)
       const params = new URLSearchParams()
       if (tipoFilter !== "all") params.append("tipo", tipoFilter)
       if (statusFilter !== "all") params.append("status", statusFilter)
+      if (bustCache) params.append("_t", String(Date.now()))
 
-      const response = await fetch(`/api/admin/chaves?${params.toString()}`)
+      const response = await fetch(`/api/admin/chaves?${params.toString()}`, {
+        cache: "no-store",
+      })
       if (response.ok) {
         const data = await response.json()
         setChaves(data.chaves || [])
@@ -132,10 +140,10 @@ export default function AdminChavesPage() {
 
       if (formData.tipo === "maquina") {
         if (!formData.limiteTempo) {
-          alert("Limite de tempo é obrigatório para máquinas")
+          alert("Limite em dias é obrigatório para máquinas")
           return
         }
-        body.limiteTempo = parseInt(formData.limiteTempo)
+        body.limiteTempo = parseInt(formData.limiteTempo, 10)
       } else {
         if (!formData.dataExpiracao) {
           alert("Data de expiração é obrigatória para assinaturas")
@@ -167,7 +175,8 @@ export default function AdminChavesPage() {
         limiteTempo: "",
         dataExpiracao: "",
       })
-      fetchChaves()
+      setDialogOpen(false)
+      await fetchChaves(true)
     } catch (error) {
       console.error("Erro ao criar chave:", error)
       alert("Erro ao criar chave")
@@ -178,6 +187,96 @@ export default function AdminChavesPage() {
     navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  function diasRestantesChave(chave: Chave): number | null {
+    const now = Date.now()
+    if (chave.dataExpiracao) {
+      const diff = new Date(chave.dataExpiracao).getTime() - now
+      return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)))
+    }
+    if (chave.tipo === "maquina" && chave.dataInicio && chave.limiteTempo != null) {
+      const inicio = new Date(chave.dataInicio).getTime()
+      const fim = inicio + chave.limiteTempo * 24 * 60 * 60 * 1000
+      return Math.max(0, Math.ceil((fim - now) / (24 * 60 * 60 * 1000)))
+    }
+    if (chave.tipo === "maquina" && chave.limiteTempo != null) return chave.limiteTempo
+    return null
+  }
+
+  const handleDeleteChave = async (id: string) => {
+    if (!confirm("Deletar esta chave? Quem a estiver usando perderá o acesso.")) return
+    setIsDeleting(id)
+    try {
+      const res = await fetch(`/api/admin/chaves?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || "Erro ao deletar")
+        return
+      }
+      setChaves((prev) => prev.filter((c) => c.id !== id))
+      await fetchChaves(true)
+    } catch (e) {
+      console.error(e)
+      alert("Erro ao deletar chave")
+    } finally {
+      setIsDeleting(null)
+    }
+  }
+
+  const openEditDias = (chave: Chave) => {
+    const dias = diasRestantesChave(chave)
+    setEditChave(chave)
+    setEditDiasValue(dias != null ? String(dias) : "")
+    setEditDiasOpen(true)
+  }
+
+  const handleSaveDias = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editChave) return
+    const dias = parseInt(editDiasValue, 10)
+    if (isNaN(dias) || dias < 0) {
+      alert("Informe um número de dias válido (≥ 0)")
+      return
+    }
+    setIsPatching(true)
+    try {
+      const res = await fetch("/api/admin/chaves", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editChave.id, diasRestantes: dias }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || "Erro ao salvar")
+        return
+      }
+      setEditDiasOpen(false)
+      setEditChave(null)
+      // Atualização imediata na tabela: dados da chave editada + status ativa se dias > 0
+      if (data.chave?.id) {
+        const dias = parseInt(editDiasValue, 10)
+        setChaves((prev) =>
+          prev.map((c) =>
+            c.id === data.chave.id
+              ? {
+                  ...c,
+                  dataExpiracao: data.chave.dataExpiracao,
+                  status: dias > 0 ? "ativa" : "expirada",
+                }
+              : c
+          )
+        )
+      }
+      await fetchChaves(true)
+    } catch (e) {
+      console.error(e)
+      alert("Erro ao salvar")
+    } finally {
+      setIsPatching(false)
+    }
   }
 
   // Não mostrar loading durante navegação - React Query tem cache
@@ -307,12 +406,12 @@ export default function AdminChavesPage() {
                       {formData.tipo === "maquina" && (
                         <div className="space-y-2">
                           <Label htmlFor="limiteTempo">
-                            Limite de Tempo (horas)
+                            Limite (dias)
                           </Label>
                           <Input
                             id="limiteTempo"
                             type="number"
-                            placeholder="Ex: 72 (3 dias) ou 8 (8 horas)"
+                            placeholder="Ex: 30"
                             value={formData.limiteTempo}
                             onChange={(e) =>
                               setFormData({
@@ -324,7 +423,7 @@ export default function AdminChavesPage() {
                             min={1}
                           />
                           <p className="text-xs text-muted-foreground">
-                            Tempo em horas que a máquina pode funcionar
+                            Quantos dias a máquina pode usar a chave
                           </p>
                         </div>
                       )}
@@ -376,6 +475,43 @@ export default function AdminChavesPage() {
               </div>
             </CardHeader>
             <CardContent>
+              <Dialog open={editDiasOpen} onOpenChange={setEditDiasOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Editar dias restantes</DialogTitle>
+                    <DialogDescription>
+                      Defina quantos dias restam para esta chave. A data de expiração será atualizada.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleSaveDias} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editDias">Dias restantes</Label>
+                      <Input
+                        id="editDias"
+                        type="number"
+                        min={0}
+                        value={editDiasValue}
+                        onChange={(e) => setEditDiasValue(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setEditDiasOpen(false)
+                          setEditChave(null)
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button type="submit" disabled={isPatching}>
+                        {isPatching ? "Salvando…" : "Salvar"}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -419,17 +555,29 @@ export default function AdminChavesPage() {
                         </TableCell>
                         <TableCell>
                           {chave.tipo === "maquina" ? (
-                            chave.limiteTempo ? (
-                              `${chave.limiteTempo}h`
+                            diasRestantesChave(chave) != null ? (
+                              `${diasRestantesChave(chave)} dias`
+                            ) : chave.limiteTempo != null ? (
+                              `${chave.limiteTempo} dias (não usada)`
                             ) : (
                               "-"
                             )
+                          ) : chave.dataExpiracao ? (
+                            (() => {
+                              const dias = diasRestantesChave(chave)
+                              return (
+                                <>
+                                  {new Date(chave.dataExpiracao).toLocaleDateString("pt-BR")}
+                                  {dias != null && (
+                                    <span className="text-muted-foreground ml-1">
+                                      ({dias} dias)
+                                    </span>
+                                  )}
+                                </>
+                              )
+                            })()
                           ) : (
-                            chave.dataExpiracao
-                              ? new Date(chave.dataExpiracao).toLocaleDateString(
-                                  "pt-BR"
-                                )
-                              : "-"
+                            "-"
                           )}
                         </TableCell>
                         <TableCell>
@@ -453,13 +601,32 @@ export default function AdminChavesPage() {
                             ? new Date(chave.usadoEm).toLocaleDateString("pt-BR")
                             : "Nunca"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="flex items-center gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => copyToClipboard(chave.chave)}
+                            title="Copiar chave"
                           >
                             <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditDias(chave)}
+                            title="Editar dias restantes"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteChave(chave.id)}
+                            disabled={isDeleting === chave.id}
+                            title="Deletar chave"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </TableCell>
                       </TableRow>
