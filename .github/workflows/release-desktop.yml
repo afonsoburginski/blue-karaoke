@@ -1,7 +1,9 @@
 # Publica release do Blue Karaoke Desktop (Tauri) no GitHub.
 #
-# A versao eh lida de tauri.conf.json. Para lancar uma nova versao,
-# basta atualizar a versao nos arquivos e fazer push.
+# A versao eh lida de tauri.conf.json. Para lancar uma nova versao:
+# 1. Atualize a versao em desktop/package.json e desktop/src-tauri/tauri.conf.json
+# 2. Commit e push para main (a Action roda automaticamente)
+# Ou: crie uma tag vX.Y.Z e dê push (ex.: git tag v1.1.1 && git push origin v1.1.1)
 #
 # Builds: Windows (NSIS installer) e Linux (.deb + .AppImage).
 # Gera latest.json para auto-updater via tauri-plugin-updater.

@@ -111,14 +111,14 @@ pub struct Ativacao {
 // -- Queries --
 
 pub fn buscar_musicas_db(query: &str) -> Result<Vec<MusicaSimple>, String> {
-    with_db(|conn| {
-        let termo = format!("%{}%", query);
+    let termo = format!("%{}%", query.trim());
+    let mut result = with_db(|conn| {
         let mut stmt = conn.prepare(
             "SELECT codigo, artista, titulo, arquivo FROM musicas_local
              WHERE artista LIKE ?1 OR titulo LIKE ?1 OR codigo LIKE ?1
              LIMIT 50"
         )?;
-        let rows = stmt.query_map(params![termo], |row| {
+        let rows = stmt.query_map(params![&termo], |row| {
             Ok(MusicaSimple {
                 codigo: row.get(0)?,
                 artista: row.get(1)?,
@@ -126,15 +126,54 @@ pub fn buscar_musicas_db(query: &str) -> Result<Vec<MusicaSimple>, String> {
                 arquivo: row.get(3)?,
             })
         })?;
-        let mut result = Vec::new();
+        let mut out = Vec::new();
         for r in rows {
-            result.push(r?);
+            out.push(r?);
         }
-        Ok(result)
-    })
+        Ok(out)
+    })?;
+    // Se a busca é só números (ex: "1001"), também buscar por código normalizado (01001)
+    let q = query.trim();
+    if q.chars().all(|c| c.is_ascii_digit()) && !q.is_empty() {
+        for variante in codigo_variantes(q) {
+            if let Ok(Some(m)) = get_musica_by_codigo_db_exact(&variante) {
+                if !result.iter().any(|r| r.codigo == m.codigo) {
+                    result.push(m);
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Gera variações do código para busca (1001 <-> 01001)
+fn codigo_variantes(codigo: &str) -> Vec<String> {
+    let mut out = vec![codigo.to_string()];
+    if !codigo.chars().all(|c| c.is_ascii_digit()) {
+        return out;
+    }
+    let padded = format!("{:0>5}", codigo);
+    if padded != codigo {
+        out.push(padded);
+    }
+    let trimmed = codigo.trim_start_matches('0');
+    let trimmed = if trimmed.is_empty() { "0" } else { trimmed };
+    if trimmed != codigo && trimmed != out.first().map(String::as_str).unwrap_or("") {
+        out.push(trimmed.to_string());
+    }
+    out
 }
 
 pub fn get_musica_by_codigo_db(codigo: &str) -> Result<Option<MusicaSimple>, String> {
+    for variante in codigo_variantes(codigo) {
+        if let Ok(Some(m)) = get_musica_by_codigo_db_exact(&variante) {
+            return Ok(Some(m));
+        }
+    }
+    Ok(None)
+}
+
+fn get_musica_by_codigo_db_exact(codigo: &str) -> Result<Option<MusicaSimple>, String> {
     with_db(|conn| {
         let mut stmt = conn.prepare(
             "SELECT codigo, artista, titulo, arquivo FROM musicas_local WHERE codigo = ?1"

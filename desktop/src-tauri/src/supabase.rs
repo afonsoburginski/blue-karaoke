@@ -56,6 +56,7 @@ pub struct SupabaseChave {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SupabaseAssinatura {
     pub id: String,
     pub user_id: String,
@@ -131,6 +132,7 @@ pub async fn validar_chave_supabase(chave: &str) -> Result<Option<SupabaseChave>
 }
 
 /// Check subscription status
+#[allow(dead_code)]
 pub async fn check_assinatura(user_id: &str) -> Result<Option<SupabaseAssinatura>, String> {
     let url = supabase_url();
     let key = supabase_key();

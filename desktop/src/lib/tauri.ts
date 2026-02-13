@@ -13,6 +13,8 @@ export interface AtivacaoStatus {
   expirada: boolean
   modo: string
   chave: string | null
+  /** "maquina" | "assinatura" - no modo máquina o input de busca fica numérico */
+  tipo: string
   diasRestantes: number | null
   horasRestantes: number | null
 }

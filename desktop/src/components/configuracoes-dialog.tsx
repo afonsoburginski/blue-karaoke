@@ -7,13 +7,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
-import { RefreshCw, Download, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { RefreshCw, Download, CheckCircle, AlertCircle, Loader2, Pause } from "lucide-react"
 import { check } from "@tauri-apps/plugin-updater"
 import { relaunch } from "@tauri-apps/plugin-process"
+
+interface OfflineInfo {
+  musicasOffline: number
+  totalMusicas: number
+  musicasOnline?: number
+}
 
 interface ConfiguracoesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  offline?: OfflineInfo
+  syncMessage?: string
+  isDownloading?: boolean
+  blockDownloads?: boolean
+  onToggleBlockDownloads?: () => void
 }
 
 const comandosTelaInicial = [
@@ -43,6 +54,11 @@ const comandosReproducao = [
 export function ConfiguracoesDialog({
   open,
   onOpenChange,
+  offline,
+  syncMessage,
+  isDownloading,
+  blockDownloads,
+  onToggleBlockDownloads,
 }: ConfiguracoesDialogProps) {
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error">("idle")
   const [updateMessage, setUpdateMessage] = useState("")
@@ -123,9 +139,44 @@ export function ConfiguracoesDialog({
           {/* Sincronizar músicas */}
           <div className="rounded-lg border p-4">
             <p className="text-base font-medium mb-1">Sincronizar músicas</p>
-            <p className="text-sm text-muted-foreground mb-3">
-              Buscar novas músicas e atualizar o catálogo local.
+            <p className="text-sm text-muted-foreground mb-2">
+              Buscar novas músicas e atualizar o catálogo local. Na tela inicial, pressione <Kbd className="font-mono text-xs">*</Kbd> (asterisco) para baixar ou sincronizar músicas.
             </p>
+            {offline != null && (
+              <div className="flex flex-wrap items-center gap-3 mb-3 py-2 px-3 rounded-md bg-muted/50">
+                <span className="text-sm font-medium text-stone-700">
+                  🎵 {offline.musicasOffline} de {offline.totalMusicas ?? (offline.musicasOffline + (offline.musicasOnline ?? 0))} músicas
+                </span>
+                {(syncMessage || isDownloading) && onToggleBlockDownloads && (
+                  <>
+                    <span className="text-stone-400">|</span>
+                    {blockDownloads ? (
+                      <button
+                        type="button"
+                        onClick={onToggleBlockDownloads}
+                        className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer text-sm"
+                        title="Clique para retomar (P)"
+                      >
+                        <Pause className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span className="text-amber-700 font-medium">Pausado</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onToggleBlockDownloads}
+                        className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer text-sm"
+                        title="Clique para pausar (P)"
+                      >
+                        <div className="w-4 h-4 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        <span className="text-cyan-700 font-medium">
+                          {isDownloading ? "Baixando…" : (syncMessage || "Sincronizando…")}
+                        </span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={handleSincronizar}

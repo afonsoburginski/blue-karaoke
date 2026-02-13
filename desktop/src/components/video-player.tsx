@@ -2,10 +2,11 @@ import { useNavigate } from "react-router-dom"
 import { useEffect, useState, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { useFilaProxima } from "@/contexts/fila-proxima"
+import { useAtivacao } from "@/hooks/use-ativacao"
 import { ConfiguracoesDialog } from "@/components/configuracoes-dialog"
 import { UnifiedSearch } from "@/components/unified-search"
 import { Settings } from "lucide-react"
-import { salvarHistorico, getVideoPath, musicaAleatoria, getMusicaByCodigo, type MusicaSimple } from "@/lib/tauri"
+import { salvarHistorico, musicaAleatoria, getMusicaByCodigo, type MusicaSimple } from "@/lib/tauri"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { convertFileSrc } from "@tauri-apps/api/core"
 
@@ -14,6 +15,7 @@ const HOLD_DURATION = 800
 export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
   const navigate = useNavigate()
   const { fila, addToFila, popFila } = useFilaProxima()
+  const { status: ativacaoStatus } = useAtivacao()
   const [holdProgress, setHoldProgress] = useState(0)
   const [isHolding, setIsHolding] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
@@ -27,18 +29,18 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const [videoSrc, setVideoSrc] = useState<string | null>(null)
 
-  // Carregar caminho do vídeo local via Tauri
+  // O banco manda: usar só o caminho gravado no banco (arquivo). Sem arquivo = não tocar.
   useEffect(() => {
-    getVideoPath(musica.codigo)
-      .then((path) => {
-        // Converter caminho do sistema de arquivos para URL que WebView pode acessar
-        setVideoSrc(convertFileSrc(path))
-      })
-      .catch((err) => {
-        console.error("[VideoPlayer] Erro ao obter caminho do vídeo:", err)
-        navigate("/?notfound=1", { replace: true })
-      })
-  }, [musica.codigo, navigate])
+    let path = musica.arquivo?.trim() ?? ""
+    // Remover prefixo \\?\ do Windows (canonicalize) que quebra convertFileSrc
+    if (path.startsWith("\\\\?\\")) path = path.slice(4)
+    if (!path) {
+      console.error("[VideoPlayer] Música sem caminho no banco:", musica.codigo)
+      navigate("/?notfound=1", { replace: true })
+      return
+    }
+    setVideoSrc(convertFileSrc(path))
+  }, [musica.codigo, musica.arquivo, navigate])
 
   const handleVideoEnd = useCallback(async () => {
     if (hasFinishedRef.current) return
@@ -100,16 +102,18 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
     }
   }, [isExiting])
 
-  // Ao completar 5 dígitos: validar e adicionar à fila
+  // Ao completar 4 ou 5 dígitos: validar e adicionar à fila (1009 → 01009)
   useEffect(() => {
     const codigo = searchQuery.replace(/\D/g, "")
-    if (codigo.length !== 5) return
+    if (codigo.length < 4 || codigo.length > 5) return
+    const codigoNorm = codigo.padStart(5, "0")
+    if (/^0+$/.test(codigoNorm)) return
     let cancelled = false
-    getMusicaByCodigo(codigo)
+    getMusicaByCodigo(codigoNorm)
       .then((data) => {
         if (cancelled) return
         if (data) {
-          addToFila({ codigo: data.codigo, titulo: data.titulo, artista: data.artista })
+          addToFila({ codigo: data.codigo, titulo: data.titulo, artista: data.artista ?? "" })
           toast.success(
             <div className="space-y-1 py-0.5">
               <p className="text-lg font-semibold leading-tight">{data.titulo}</p>
@@ -156,7 +160,7 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         return
       }
 
-      if (e.code === "Delete" || e.key === "Delete") {
+      if (e.code === "Delete" || e.key === "Delete" || e.code === "NumpadDecimal") {
         e.preventDefault()
         const video = videoRef.current
         if (video) video.pause()
@@ -178,7 +182,7 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         e.preventDefault()
         musicaAleatoria()
           .then((cod) => {
-            if (cod) navigate(`/tocar/${cod}`)
+            if (cod) navigate(`/tocar?c=${encodeURIComponent(cod)}`)
             else toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
           })
           .catch(() => toast.error("Erro ao buscar música aleatória."))
@@ -210,6 +214,8 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
           setSearchQuery((prev) => prev.slice(0, -1))
           return
         }
+        // Ignorar teclas especiais do numpad que geram caracteres (ex: NumpadDecimal = "," no pt-BR)
+        if (e.code === "NumpadDecimal") return
         if (!isExiting && !e.repeat && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault()
           setSearchQuery((prev) => prev + e.key)
@@ -270,7 +276,7 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
           <span className="text-stone-400 select-none">·</span>
           <button type="button" onClick={() => {
             musicaAleatoria()
-              .then((cod) => { if (cod) navigate(`/tocar/${cod}`); else toast.info("Nenhuma música baixada.") })
+              .then((cod) => { if (cod) navigate(`/tocar?c=${encodeURIComponent(cod)}`); else toast.info("Nenhuma música baixada.") })
               .catch(() => toast.error("Erro ao buscar música aleatória."))
           }} className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal" title="Tocar música aleatória (C)">
             Tocar música aleatória (C)
@@ -305,6 +311,7 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
           <UnifiedSearch
             value={searchQuery}
             onChange={setSearchQuery}
+            tipoChave={ativacaoStatus.tipo}
             onSelectCodigo={(codigo, info) => {
               addToFila({ codigo, titulo: info?.titulo, artista: info?.artista })
               const titulo = info?.titulo ?? "Música"
@@ -324,8 +331,15 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         </div>
       )}
 
-      {/* Video player */}
-      <div className="absolute inset-0 overflow-hidden">
+      {/* Overlay invisível atrás do vídeo: recebe foco para teclado, não bloqueia renderização do vídeo (WebView2) */}
+      <div
+        ref={overlayRef}
+        tabIndex={0}
+        className="absolute inset-0 z-[5] outline-none pointer-events-none"
+        aria-hidden
+      />
+      {/* Vídeo em camada própria acima: evita que container com foco esconda o vídeo no modo máquina/WebView2 */}
+      <div className="absolute inset-0 overflow-hidden z-10">
         {videoSrc && (
           <video
             ref={videoRef}
@@ -341,14 +355,6 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
           />
         )}
       </div>
-
-      {/* Camada transparente: recebe foco para teclado */}
-      <div
-        ref={overlayRef}
-        tabIndex={0}
-        className="absolute inset-0 pointer-events-auto bg-transparent z-10 outline-none"
-        aria-hidden
-      />
 
       {/* Overlay de transição */}
       {isExiting && (

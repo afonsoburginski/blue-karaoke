@@ -8,7 +8,7 @@ import { useAtivacao } from "@/hooks/use-ativacao"
 import { ConfiguracoesDialog } from "@/components/configuracoes-dialog"
 import { QrCodesHome } from "@/components/qr-code"
 import { toast } from "sonner"
-import { Calendar, Clock, Pause, Settings } from "lucide-react"
+import { Calendar, Clock, Settings } from "lucide-react"
 import { getMusicaByCodigo, musicaAleatoria } from "@/lib/tauri"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 
@@ -26,9 +26,15 @@ function HomePageContent() {
   const { status: ativacaoStatus, verificar: verificarAtivacao } = useAtivacao()
   const acabouDeAtivarRef = useRef(false)
   const [justActivated, setJustActivated] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const isActivated = ativacaoStatus.ativada && !ativacaoStatus.expirada
   const isActivatedOrJustActivated = isActivated || justActivated
+  const isModoMaquina = ativacaoStatus.tipo === "maquina"
+
+  const setCodigoMaquina = useCallback((v: string) => {
+    setCodigo(v.replace(/\D/g, "").slice(0, 5))
+  }, [])
 
   const toggleBlockDownloads = useCallback(() => {
     setBlockDownloads((prev) => {
@@ -80,6 +86,18 @@ function HomePageContent() {
     }
   }, [ativacaoStatus.ativada, ativacaoStatus.expirada, justActivated])
 
+  // Modo máquina sem mouse: focar o input ao carregar para que digitar funcione sem clicar
+  useEffect(() => {
+    if (!isModoMaquina || !isActivatedOrJustActivated) return
+    const focusInput = () => searchInputRef.current?.focus()
+    const t1 = setTimeout(focusInput, 200)
+    const t2 = setTimeout(focusInput, 800)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
+  }, [isModoMaquina, isActivatedOrJustActivated])
+
   // Toast quando voltar da página de tocar com música não encontrada
   useEffect(() => {
     if (searchParams.get("notfound") === "1") {
@@ -113,13 +131,14 @@ function HomePageContent() {
       setAtivacaoDialogOpen(true)
       return
     }
-    if (isLoading || codigo.length !== 5) return
+    const codigoNorm = codigo.padStart(5, "0")
+    if (/^0+$/.test(codigoNorm) || isLoading || codigo.length < 4 || codigo.length > 5) return
 
     setIsLoading(true)
     try {
-      const musica = await getMusicaByCodigo(codigo)
+      const musica = await getMusicaByCodigo(codigoNorm)
       if (musica) {
-        navigate(`/tocar/${codigo}`)
+        navigate(`/tocar?c=${encodeURIComponent(codigoNorm)}`)
       } else {
         setError(true)
         setTimeout(() => {
@@ -171,8 +190,8 @@ function HomePageContent() {
         return
       }
 
-      // * ou Multiply (numpad): sincronização
-      if (isActivatedOrJustActivated && (e.key === "*" || e.key === "Multiply" || e.code === "NumpadMultiply")) {
+      // * ou Multiply (numpad): sincronização (só se não estiver no input)
+      if (!isInputElement && isActivatedOrJustActivated && (e.key === "*" || e.key === "Multiply" || e.code === "NumpadMultiply")) {
         window.dispatchEvent(new CustomEvent("checkNewMusic"))
         e.preventDefault()
         return
@@ -195,14 +214,14 @@ function HomePageContent() {
           setCodigo((prev) => prev + e.key)
         }
         e.preventDefault()
-      } else if (e.key === "Enter" && codigo.length === 5 && !isLoading) {
+      } else if (e.key === "Enter" && codigo.length >= 4 && codigo.length <= 5 && !isLoading) {
         handleSubmit()
         e.preventDefault()
       } else if (e.key === "Backspace") {
         setCodigo((prev) => prev.slice(0, -1))
         setError(false)
         e.preventDefault()
-      } else if (e.key === "Delete") {
+      } else if (e.key === "Delete" || e.code === "NumpadDecimal") {
         setCodigo("")
         setError(false)
         e.preventDefault()
@@ -213,7 +232,7 @@ function HomePageContent() {
         e.preventDefault()
         musicaAleatoria()
           .then((cod) => {
-            if (cod) navigate(`/tocar/${cod}`)
+            if (cod) navigate(`/tocar?c=${encodeURIComponent(cod)}`)
             else toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
           })
           .catch(() => toast.error("Erro ao buscar música aleatória."))
@@ -283,8 +302,8 @@ function HomePageContent() {
         </div>
       </div>
 
-      {/* Canto superior direito: configurações + componentes de download */}
-      <div className="absolute right-8 z-20 top-16 flex flex-col items-end gap-3">
+      {/* Canto superior direito: configurações */}
+      <div className="absolute right-8 z-20 top-16">
         <div className="w-max bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 rounded-lg">
           <button
             type="button"
@@ -296,43 +315,6 @@ function HomePageContent() {
             Configurações (F12)
           </button>
         </div>
-        {isActivatedOrJustActivated && (
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white border-2 border-stone-300 text-stone-800 shadow-sm">
-              <span className="text-stone-700 text-xl font-medium">
-                🎵 {offline.musicasOffline} de {offline.totalMusicas ?? (offline.musicasOffline + (offline.musicasOnline || 0))} músicas
-              </span>
-              {(syncMessage || isDownloading) && (
-                <>
-                  <span className="text-stone-400">|</span>
-                  {blockDownloads ? (
-                    <button
-                      type="button"
-                      onClick={toggleBlockDownloads}
-                      className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
-                      title="Clique para retomar (P)"
-                    >
-                      <Pause className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                      <span className="text-amber-700 text-xl font-medium">Pausado</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={toggleBlockDownloads}
-                      className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
-                      title="Clique para pausar (P)"
-                    >
-                      <div className="w-5 h-5 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                      <span className="text-cyan-700 text-xl font-medium">
-                        {isDownloading ? "Baixando…" : (syncMessage || "Sincronizando…")}
-                      </span>
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Status de Ativação no canto superior direito */}
@@ -355,38 +337,47 @@ function HomePageContent() {
         </div>
       )}
 
-      {/* Barra inferior: busca + status */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 min-h-72 flex items-center justify-between pl-0 pr-8 py-6 gap-8">
-        <div className="min-w-0 max-w-3xl space-y-4 flex-1 flex flex-col items-start pl-8">
-          <h1 className="text-3xl md:text-4xl text-white font-semibold tracking-wide">
-            Busque por código, nome ou artista
+      {/* Barra inferior: coluna esquerda (título + input + instruções) e coluna direita (detalhes da música) */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 min-h-72 flex items-start justify-between pl-8 pr-8 py-6 gap-8">
+        <div className="min-w-0 max-w-3xl flex-1 flex flex-col items-start space-y-4">
+          <h1 className={`whitespace-nowrap ${isModoMaquina ? "text-4xl md:text-5xl text-white font-semibold tracking-wide" : "text-3xl md:text-4xl text-white font-semibold tracking-wide"}`}>
+            {isModoMaquina ? "Busque por código" : "Busque por código, nome ou artista"}
           </h1>
 
           {isActivatedOrJustActivated && (
-            <UnifiedSearch />
+            <UnifiedSearch
+              autoFocus
+              tipoChave={ativacaoStatus.tipo}
+              {...(isModoMaquina
+                ? {
+                    value: codigo,
+                    onChange: setCodigoMaquina,
+                    inputRef: searchInputRef,
+                  }
+                : {})}
+            />
           )}
 
           {error && (
-            <p className="text-red-700 text-base font-medium">Código inválido! Tente novamente.</p>
+            <p className={isModoMaquina ? "text-red-700 text-xl font-medium" : "text-red-700 text-base font-medium"}>Código inválido! Tente novamente.</p>
           )}
 
           {isActivatedOrJustActivated && (
-            <div className="space-y-0.5 text-white text-2xl">
+            <div className={isModoMaquina ? "space-y-1 text-white text-3xl md:text-4xl" : "space-y-0.5 text-white text-2xl"}>
               <p>Digite o <span className="font-semibold text-white">código</span> ou <span className="font-semibold text-white">nome da música</span></p>
               <p className="text-white/90">Pressione <span className="font-medium text-white">Enter</span> ou clique no resultado</p>
-              <p className="text-white/90">Pressione <span className="font-medium text-white">*</span> (asterisco) para <span className="font-medium text-white">baixar/sincronizar músicas</span></p>
             </div>
           )}
         </div>
 
         {isActivatedOrJustActivated && (
-          <div id="search-selected-center" className="flex-1 min-w-0 flex items-center justify-center px-4" />
+          <div id="search-selected-center" className="flex-1 min-w-0 flex items-start justify-start pt-14 pl-0 -ml-24" />
         )}
       </div>
 
       {/* QR codes no canto inferior direito */}
       <div className="absolute right-8 bottom-8 z-20">
-        <QrCodesHome />
+        <QrCodesHome modoMaquina={isModoMaquina} />
       </div>
 
       <AtivacaoDialog
@@ -397,6 +388,11 @@ function HomePageContent() {
       <ConfiguracoesDialog
         open={configDialogOpen}
         onOpenChange={setConfigDialogOpen}
+        offline={isActivatedOrJustActivated ? offline : undefined}
+        syncMessage={syncMessage ?? undefined}
+        isDownloading={isDownloading}
+        blockDownloads={blockDownloads}
+        onToggleBlockDownloads={toggleBlockDownloads}
       />
     </main>
   )

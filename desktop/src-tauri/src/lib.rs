@@ -84,23 +84,34 @@ pub struct AppState {
     pub data_dir: String,
 }
 
-fn get_data_dir(handle: &tauri::AppHandle) -> String {
-    // Try portable mode first (data/ next to exe)
+fn get_data_dir(_handle: &tauri::AppHandle) -> String {
+    // Em dev: usar sempre target/debug/data do projeto (onde estão db e musicas)
+    #[cfg(debug_assertions)]
+    {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let path = manifest.join("target").join("debug").join("data");
+        let s = path.to_string_lossy().to_string();
+        log::info!("Data dir (dev): {}", s);
+        return s;
+    }
+
+    // Produção: pasta "data" ao lado do executável
+    #[cfg(not(debug_assertions))]
     if let Ok(exe_path) = std::env::current_exe() {
-        let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
-        let portable_dir = exe_dir.join("data");
-        if let Ok(_) = std::fs::create_dir_all(&portable_dir) {
-            return portable_dir.to_string_lossy().to_string();
+        if let Some(exe_dir) = exe_path.parent() {
+            let path = exe_dir.join("data").to_string_lossy().to_string();
+            log::info!("Data dir: {}", path);
+            return path;
         }
     }
 
-    // Fallback to app data dir
-    if let Some(app_dir) = handle.path().app_data_dir().ok() {
-        return app_dir.to_string_lossy().to_string();
+    #[cfg(not(debug_assertions))]
+    {
+        if let Some(app_dir) = _handle.path().app_data_dir().ok() {
+            return app_dir.to_string_lossy().to_string();
+        }
+        dirs::data_dir()
+            .map(|d| d.join("blue-karaoke").to_string_lossy().to_string())
+            .unwrap_or_else(|| "data".to_string())
     }
-
-    // Last resort
-    dirs::data_dir()
-        .map(|d| d.join("blue-karaoke").to_string_lossy().to_string())
-        .unwrap_or_else(|| "data".to_string())
 }

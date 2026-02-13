@@ -64,7 +64,7 @@ export default function NotaPage() {
   const goAfterNota = useCallback(() => {
     if (proximoCodigo) {
       popFila()
-      navigate(`/tocar/${proximoCodigo}`)
+      navigate(`/tocar?c=${encodeURIComponent(proximoCodigo)}`)
     } else {
       navigate("/")
     }

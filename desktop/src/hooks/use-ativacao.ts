@@ -11,6 +11,7 @@ export function useAtivacao() {
     expirada: false,
     modo: "loading",
     chave: null,
+    tipo: "assinatura",
     diasRestantes: null,
     horasRestantes: null,
   })

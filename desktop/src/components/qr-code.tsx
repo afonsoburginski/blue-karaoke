@@ -1,36 +1,42 @@
+import type { FC } from "react"
 import { QRCodeSVG } from "qrcode.react"
 
 export interface QrCodeProps {
   value: string
   label?: string
   imageSrc?: string
+  /** Modo máquina: QR e rótulo maiores */
+  large?: boolean
 }
 
-export function QrCode({ value, label, imageSrc }: QrCodeProps) {
+export function QrCode({ value, label, imageSrc, large }: QrCodeProps) {
+  const qrSize = large ? 220 : 165
   const qrContent = imageSrc ? (
     <img
       src={imageSrc}
       alt={label ?? "QR Code"}
-      width={140}
-      height={140}
+      width={qrSize}
+      height={qrSize}
       className="block"
+      style={{ width: qrSize, height: qrSize }}
     />
   ) : (
     <QRCodeSVG
       value={value}
-      size={140}
+      size={qrSize}
       level="M"
-      marginSize={4}
+      marginSize={large ? 4 : 3}
       bgColor="#FFFFFF"
       fgColor="#000000"
       className="block"
+      style={{ width: qrSize, height: qrSize, minWidth: qrSize, minHeight: qrSize }}
     />
   )
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-lg border border-stone-300 bg-white p-2 flex flex-col items-center gap-0.5">
+    <div className={`rounded-xl overflow-hidden shadow-md border border-stone-300 bg-white flex flex-col items-center gap-1 ${large ? "p-3 border-2" : "p-2"}`}>
       {label && (
-        <p className="text-xl font-bold text-stone-600 text-center">
+        <p className={large ? "text-2xl font-bold text-stone-600 text-center" : "text-lg font-bold text-stone-600 text-center"}>
           {label}
         </p>
       )}
@@ -43,11 +49,15 @@ export function QrCode({ value, label, imageSrc }: QrCodeProps) {
 const CATALOGO_URL = "https://www.bluekaraokes.com.br/catalogo"
 const INSTAGRAM_URL = "https://www.instagram.com/bluekaraokesinop?igsh=MWJjamM4YjFrbHp3MA%3D%3D"
 
-export function QrCodesHome() {
+export interface QrCodesHomeProps {
+  modoMaquina?: boolean
+}
+
+export const QrCodesHome: FC<QrCodesHomeProps> = ({ modoMaquina }) => {
   return (
-    <div className="flex flex-row items-center gap-3">
-      <QrCode value={CATALOGO_URL} label="Catálogo" />
-      <QrCode value={INSTAGRAM_URL} label="Instagram" />
+    <div className={`flex flex-row items-center ${modoMaquina ? "gap-6" : "gap-3"}`}>
+      <QrCode value={CATALOGO_URL} label="Catálogo" large={modoMaquina} />
+      <QrCode value={INSTAGRAM_URL} label="Instagram" large={modoMaquina} />
     </div>
   )
 }

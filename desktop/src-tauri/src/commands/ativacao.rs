@@ -8,6 +8,8 @@ pub struct AtivacaoStatus {
     pub expirada: bool,
     pub modo: String,
     pub chave: Option<String>,
+    /// "maquina" ou "assinatura" - usado no frontend para input numérico no modo máquina
+    pub tipo: String,
     #[serde(rename = "diasRestantes")]
     pub dias_restantes: Option<i64>,
     #[serde(rename = "horasRestantes")]
@@ -25,6 +27,7 @@ pub async fn verificar_ativacao() -> Result<AtivacaoStatus, String> {
             expirada: false,
             modo: "offline".to_string(),
             chave: None,
+            tipo: "assinatura".to_string(),
             dias_restantes: None,
             horas_restantes: None,
         }),
@@ -49,7 +52,8 @@ pub async fn verificar_ativacao() -> Result<AtivacaoStatus, String> {
                             ativada: false,
                             expirada: true,
                             modo: "offline".to_string(),
-                            chave: Some(atv.chave),
+                            chave: Some(atv.chave.clone()),
+                            tipo: atv.tipo.clone(),
                             dias_restantes: Some(0),
                             horas_restantes: None,
                         });
@@ -61,7 +65,8 @@ pub async fn verificar_ativacao() -> Result<AtivacaoStatus, String> {
                         ativada: true,
                         expirada: false,
                         modo: "offline".to_string(),
-                        chave: Some(atv.chave),
+                        chave: Some(atv.chave.clone()),
+                        tipo: atv.tipo.clone(),
                         dias_restantes: Some(dias),
                         horas_restantes: None,
                     });
@@ -75,7 +80,8 @@ pub async fn verificar_ativacao() -> Result<AtivacaoStatus, String> {
                         ativada: remaining > 0,
                         expirada: remaining <= 0,
                         modo: "offline".to_string(),
-                        chave: Some(atv.chave),
+                        chave: Some(atv.chave.clone()),
+                        tipo: atv.tipo.clone(),
                         dias_restantes: Some(remaining),
                         horas_restantes: None,
                     });
@@ -88,7 +94,8 @@ pub async fn verificar_ativacao() -> Result<AtivacaoStatus, String> {
                         ativada: remaining > 0.0,
                         expirada: remaining <= 0.0,
                         modo: "offline".to_string(),
-                        chave: Some(atv.chave),
+                        chave: Some(atv.chave.clone()),
+                        tipo: atv.tipo.clone(),
                         dias_restantes: None,
                         horas_restantes: Some(remaining.max(0.0)),
                     });
@@ -101,6 +108,7 @@ pub async fn verificar_ativacao() -> Result<AtivacaoStatus, String> {
                 expirada: false,
                 modo: "offline".to_string(),
                 chave: Some(atv.chave),
+                tipo: atv.tipo,
                 dias_restantes: atv.dias_restantes,
                 horas_restantes: atv.horas_restantes,
             })
@@ -147,7 +155,8 @@ async fn try_online_validation(chave: &str) -> Result<AtivacaoStatus, String> {
                     ativada: false,
                     expirada: true,
                     modo: "online".to_string(),
-                    chave: Some(chave_data.chave),
+                    chave: Some(chave_data.chave.clone()),
+                    tipo: chave_data.tipo.clone(),
                     dias_restantes: None,
                     horas_restantes: None,
                 });
@@ -171,7 +180,8 @@ async fn try_online_validation(chave: &str) -> Result<AtivacaoStatus, String> {
                                 ativada: false,
                                 expirada: true,
                                 modo: "online".to_string(),
-                                chave: Some(chave_data.chave),
+                                chave: Some(chave_data.chave.clone()),
+                                tipo: chave_data.tipo.clone(),
                                 dias_restantes: Some(0),
                                 horas_restantes: None,
                             });
@@ -191,7 +201,8 @@ async fn try_online_validation(chave: &str) -> Result<AtivacaoStatus, String> {
                                 ativada: false,
                                 expirada: true,
                                 modo: "online".to_string(),
-                                chave: Some(chave_data.chave),
+                                chave: Some(chave_data.chave.clone()),
+                                tipo: chave_data.tipo.clone(),
                                 dias_restantes: None,
                                 horas_restantes: Some(0.0),
                             });
@@ -218,6 +229,7 @@ async fn try_online_validation(chave: &str) -> Result<AtivacaoStatus, String> {
                 expirada: false,
                 modo: "online".to_string(),
                 chave: Some(chave_data.chave),
+                tipo: chave_data.tipo,
                 dias_restantes,
                 horas_restantes,
             })

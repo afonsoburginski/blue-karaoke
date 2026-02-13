@@ -19,7 +19,7 @@ pub struct OfflineStatus {
 }
 
 #[tauri::command]
-pub async fn get_offline_status(state: tauri::State<'_, AppState>) -> Result<OfflineStatus, String> {
+pub async fn get_offline_status(_state: tauri::State<'_, AppState>) -> Result<OfflineStatus, String> {
     let local_count = db::count_musicas_local()?;
     let storage = db::storage_used()?;
     
@@ -78,16 +78,15 @@ pub async fn download_batch(size: Option<i32>, state: tauri::State<'_, AppState>
     for musica in batch {
         let dest = musicas_dir.join(format!("{}.mp4", musica.codigo));
         let dest_str = dest.to_string_lossy().to_string();
-        
+
         match supabase::download_file(&musica.arquivo, &dest_str).await {
             Ok(size) => {
-                // Insert into local DB
                 let db_musica = db::Musica {
                     id: musica.id.clone(),
                     codigo: musica.codigo.clone(),
                     artista: musica.artista.clone(),
                     titulo: musica.titulo.clone(),
-                    arquivo: dest_str,
+                    arquivo: dest_str.clone(),
                     nome_arquivo: musica.nome_arquivo.clone(),
                     tamanho: Some(size as i64),
                     duracao: musica.duracao.as_ref().and_then(|v| v.as_i64()),
@@ -166,9 +165,10 @@ pub async fn reindex_musicas(state: tauri::State<'_, AppState>) -> Result<Reinde
         
         // Find in remote data
         if let Some(musica) = remote.iter().find(|m| m.codigo == codigo) {
-            let file_path = file.path().to_string_lossy().to_string();
-            let size = std::fs::metadata(file.path()).map(|m| m.len() as i64).unwrap_or(0);
-            
+            let path = file.path();
+            let file_path = path.to_string_lossy().to_string();
+            let size = std::fs::metadata(&path).map(|m| m.len() as i64).unwrap_or(0);
+
             let db_musica = db::Musica {
                 id: musica.id.clone(),
                 codigo: musica.codigo.clone(),

@@ -7,7 +7,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/tocar/:codigo" element={<TocarPage />} />
+      <Route path="/tocar" element={<TocarPage />} />
       <Route path="/nota" element={<NotaPage />} />
     </Routes>
   )

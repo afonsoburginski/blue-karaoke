@@ -1,6 +1,6 @@
 {
   "name": "blue-karaoke",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Sistema de Karaoke Blue Karaoke - Desktop Tauri",
   "private": true,
   "scripts": {
@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "clean:dev": "node scripts/clean-dev.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",
