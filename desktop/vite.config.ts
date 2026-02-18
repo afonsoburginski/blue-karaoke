@@ -4,8 +4,11 @@ import tailwindcss from "@tailwindcss/vite"
 import path from "path"
 
 const host = process.env.TAURI_DEV_HOST
+// Em produção (tauri build) o app é servido do dist: base relativa para os assets carregarem no Windows
+const base = process.env.NODE_ENV === "production" ? "./" : "/"
 
 export default defineConfig({
+  base,
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

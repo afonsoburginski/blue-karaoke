@@ -34,6 +34,8 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
     let path = musica.arquivo?.trim() ?? ""
     // Remover prefixo \\?\ do Windows (canonicalize) que quebra convertFileSrc
     if (path.startsWith("\\\\?\\")) path = path.slice(4)
+    // Normalizar barras no Windows para compatibilidade com convertFileSrc em prod
+    path = path.replace(/\\/g, "/")
     if (!path) {
       console.error("[VideoPlayer] Música sem caminho no banco:", musica.codigo)
       navigate("/?notfound=1", { replace: true })

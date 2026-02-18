@@ -95,23 +95,25 @@ fn get_data_dir(_handle: &tauri::AppHandle) -> String {
         return s;
     }
 
-    // Produção: pasta "data" ao lado do executável
+    // Produção: preferir AppData (gravável no Windows mesmo com exe em Program Files); depois pasta "data" ao lado do exe (portable)
+    #[cfg(not(debug_assertions))]
+    if let Ok(app_dir) = _handle.path().app_data_dir() {
+        let path = app_dir.to_string_lossy().to_string();
+        log::info!("Data dir (AppData): {}", path);
+        return path;
+    }
+
     #[cfg(not(debug_assertions))]
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let path = exe_dir.join("data").to_string_lossy().to_string();
-            log::info!("Data dir: {}", path);
+            log::info!("Data dir (exe): {}", path);
             return path;
         }
     }
 
     #[cfg(not(debug_assertions))]
-    {
-        if let Some(app_dir) = _handle.path().app_data_dir().ok() {
-            return app_dir.to_string_lossy().to_string();
-        }
-        dirs::data_dir()
-            .map(|d| d.join("blue-karaoke").to_string_lossy().to_string())
-            .unwrap_or_else(|| "data".to_string())
-    }
+    dirs::data_dir()
+        .map(|d| d.join("blue-karaoke").to_string_lossy().to_string())
+        .unwrap_or_else(|| "data".to_string())
 }
