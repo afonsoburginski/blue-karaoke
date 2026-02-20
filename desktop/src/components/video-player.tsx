@@ -26,8 +26,9 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
   const animationFrameRef = useRef<number | null>(null)
   const hasFinishedRef = useRef(false)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const overlayRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [videoSrc, setVideoSrc] = useState<string | null>(null)
+  const [videoError, setVideoError] = useState<string | null>(null)
 
   // O banco manda: usar só o caminho gravado no banco (arquivo). Sem arquivo = não tocar.
   useEffect(() => {
@@ -171,6 +172,7 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
       }
       if (e.key === "+") {
         e.preventDefault()
+        setVideoError(null)
         const video = videoRef.current
         if (video) {
           video.currentTime = 0
@@ -245,19 +247,29 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
     }
   }, [startHold, cancelHold, navigate, isExiting, searchQuery, configDialogOpen])
 
-  // Foco na overlay para as teclas funcionarem
+  // Foco no container para as teclas funcionarem (listeners estão no document, mas foco previne scroll)
   useEffect(() => {
-    overlayRef.current?.focus()
+    containerRef.current?.focus()
   }, [])
 
-  // Garantir que o vídeo comece a tocar quando a fonte estiver pronta (autoplay pode falhar com som em alguns ambientes)
+  // Garantir que o vídeo comece a tocar quando a fonte estiver pronta
   useEffect(() => {
     if (!videoSrc) return
     const video = videoRef.current
     if (!video) return
+
     const tryPlay = () => {
-      if (video.paused && video.readyState >= 2) video.play().catch(() => {})
+      if (video.paused && video.readyState >= 2) {
+        video.play().catch((err) => {
+          console.warn("[VideoPlayer] play() bloqueado, tentando muted:", err)
+          video.muted = true
+          video.play().then(() => {
+            setTimeout(() => { video.muted = false }, 200)
+          }).catch(() => {})
+        })
+      }
     }
+
     tryPlay()
     video.addEventListener("canplay", tryPlay)
     return () => video.removeEventListener("canplay", tryPlay)
@@ -265,13 +277,15 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
 
   return (
     <div
-      className={`fixed inset-0 z-0 w-screen h-screen overflow-hidden bg-black transition-all duration-700 ${
+      ref={containerRef}
+      tabIndex={0}
+      className={`fixed inset-0 z-0 w-screen h-screen overflow-hidden bg-black outline-none transition-all duration-700 ${
         isExiting && !transitionToNextSong ? 'opacity-0 scale-105' : 'opacity-100 scale-100'
       }`}
       style={{ maxWidth: '100vw', maxHeight: '100dvh' }}
     >
       {/* Logo no canto superior esquerdo */}
-      <div className="absolute top-8 left-8 z-20">
+      <div className="absolute top-8 left-8 z-20 pointer-events-none">
         <div className="w-24 h-24 md:w-28 md:h-28">
           <img
             src="/logo-white.png"
@@ -346,34 +360,38 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         </div>
       )}
 
-      {/* Overlay invisível atrás do vídeo: recebe foco para teclado, não bloqueia renderização do vídeo (WebView2) */}
-      <div
-        ref={overlayRef}
-        tabIndex={0}
-        className="absolute inset-0 z-[5] outline-none pointer-events-none"
-        aria-hidden
-      />
-      {/* Vídeo em camada própria acima: evita que container com foco esconda o vídeo no modo máquina/WebView2 */}
-      <div className="absolute inset-0 overflow-hidden z-10">
-        {videoSrc && (
-          <video
-            ref={videoRef}
-            tabIndex={-1}
-            className="w-full h-full object-contain bg-black"
-            src={videoSrc}
-            autoPlay
-            muted={false}
-            controls={false}
-            playsInline
-            loop={false}
-            onEnded={handleVideoEnd}
-            onCanPlay={(e) => {
-              const video = e.currentTarget
-              if (video.paused) video.play().catch(() => {})
-            }}
-          />
-        )}
-      </div>
+      {/* Vídeo: sem z-index intermediário para evitar bug de compositing no WebView2/Windows 10 */}
+      {videoSrc && (
+        <video
+          ref={videoRef}
+          tabIndex={-1}
+          className="absolute inset-0 w-full h-full object-contain bg-black"
+          src={videoSrc}
+          autoPlay
+          muted={false}
+          controls={false}
+          playsInline
+          loop={false}
+          onEnded={handleVideoEnd}
+          onError={(e) => {
+            const video = e.currentTarget
+            const err = video.error
+            console.error("[VideoPlayer] Erro ao carregar vídeo:", err?.code, err?.message, videoSrc)
+            setVideoError(`Erro ${err?.code}: ${err?.message || "falha ao carregar vídeo"}`)
+          }}
+        />
+      )}
+
+      {/* Fallback de erro de vídeo */}
+      {videoError && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/90">
+          <div className="text-center space-y-4 max-w-lg px-8">
+            <p className="text-red-400 text-2xl font-semibold">Não foi possível reproduzir</p>
+            <p className="text-white/60 text-lg">{videoError}</p>
+            <p className="text-white/40 text-base">Pressione <span className="text-cyan-400 font-mono">+</span> para tentar novamente ou <span className="text-cyan-400 font-mono">Delete</span> para voltar</p>
+          </div>
+        </div>
+      )}
 
       {/* Overlay de transição */}
       {isExiting && (
