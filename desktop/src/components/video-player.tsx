@@ -250,6 +250,19 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
     overlayRef.current?.focus()
   }, [])
 
+  // Garantir que o vídeo comece a tocar quando a fonte estiver pronta (autoplay pode falhar com som em alguns ambientes)
+  useEffect(() => {
+    if (!videoSrc) return
+    const video = videoRef.current
+    if (!video) return
+    const tryPlay = () => {
+      if (video.paused && video.readyState >= 2) video.play().catch(() => {})
+    }
+    tryPlay()
+    video.addEventListener("canplay", tryPlay)
+    return () => video.removeEventListener("canplay", tryPlay)
+  }, [videoSrc])
+
   return (
     <div
       className={`fixed inset-0 z-0 w-screen h-screen overflow-hidden bg-black transition-all duration-700 ${
@@ -354,6 +367,10 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
             playsInline
             loop={false}
             onEnded={handleVideoEnd}
+            onCanPlay={(e) => {
+              const video = e.currentTarget
+              if (video.paused) video.play().catch(() => {})
+            }}
           />
         )}
       </div>

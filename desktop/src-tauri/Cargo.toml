@@ -1,6 +1,6 @@
 [package]
 name = "blue-karaoke"
-version = "1.1.0"
+version = "1.1.2"
 description = "Sistema de Karaoke Blue Karaoke"
 authors = ["Blue Karaoke"]
 edition = "2021"

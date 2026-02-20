@@ -1,9 +1,10 @@
 # Publica release do Blue Karaoke Desktop (Tauri) no GitHub.
 #
-# A versao eh lida de tauri.conf.json. Para lancar uma nova versao:
-# 1. Atualize a versao em desktop/package.json e desktop/src-tauri/tauri.conf.json
+# Usa Bun para instalar dependências e build do frontend.
+# A versão é lida de tauri.conf.json. Para lançar uma nova versão:
+# 1. Atualize a versão em desktop/package.json, desktop/src-tauri/tauri.conf.json e desktop/src-tauri/Cargo.toml
 # 2. Commit e push para main (a Action roda automaticamente)
-# Ou: crie uma tag vX.Y.Z e dê push (ex.: git tag v1.1.1 && git push origin v1.1.1)
+# Ou: crie uma tag vX.Y.Z e dê push (ex.: git tag v1.1.2 && git push origin v1.1.2)
 #
 # Builds: Windows (NSIS installer) e Linux (.deb + .AppImage).
 # Gera latest.json para auto-updater via tauri-plugin-updater.
@@ -52,10 +53,10 @@ jobs:
             libgtk-3-dev \
             libglib2.0-dev
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: "20"
+          bun-version: latest
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -76,10 +77,11 @@ jobs:
           ENVEOF
 
       - name: Install frontend dependencies
-        run: npm install
+        run: bun install --frozen-lockfile
 
+      # Se aparecer "Detected unsettled top-level await" no log, é warning interno da action; pode ignorar.
       - name: Build Tauri app and create release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
