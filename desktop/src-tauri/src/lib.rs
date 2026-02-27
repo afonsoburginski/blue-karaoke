@@ -3,12 +3,14 @@ mod db;
 mod supabase;
 
 use tauri::Manager;
+use commands::player::NativePlayerState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
 
     tauri::Builder::default()
+        .manage(NativePlayerState::new())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -75,6 +77,10 @@ pub fn run() {
             commands::sync::download_batch,
             commands::sync::reindex_musicas,
             commands::video::get_video_path,
+            commands::player::native_player_available,
+            commands::player::play_native,
+            commands::player::stop_native,
+            commands::player::native_player_ended,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -27,6 +27,7 @@ function HomePageContent() {
   const acabouDeAtivarRef = useRef(false)
   const [justActivated, setJustActivated] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const syncToastIdRef = useRef<string | number | null>(null)
 
   const isActivated = ativacaoStatus.ativada && !ativacaoStatus.expirada
   const isActivatedOrJustActivated = isActivated || justActivated
@@ -61,9 +62,17 @@ function HomePageContent() {
         setBlockDownloads(false)
         localStorage.setItem("blue-karaoke-download-blocked", "0")
       }
-      toast.info("Baixando músicas…")
+      const tid = toast.loading("Sincronizando músicas…")
+      syncToastIdRef.current = tid
       await downloadMetadata()
       startBackgroundDownload()
+      // Se nenhum download iniciar em 3s (nada pendente), mostra sucesso
+      setTimeout(() => {
+        if (syncToastIdRef.current === tid) {
+          toast.success("Músicas sincronizadas!", { id: tid })
+          syncToastIdRef.current = null
+        }
+      }, 3000)
     }
 
     const handleDownloadAll = () => {
@@ -78,6 +87,20 @@ function HomePageContent() {
       window.removeEventListener("downloadAllOffline", handleDownloadAll)
     }
   }, [downloadMetadata, downloadAllForOffline, startBackgroundDownload, isActivated, justActivated, blockDownloads])
+
+  // Atualizar toast de sync: loading → success quando download terminar
+  const prevIsDownloadingRef = useRef(false)
+  useEffect(() => {
+    const wasDownloading = prevIsDownloadingRef.current
+    prevIsDownloadingRef.current = isDownloading
+
+    if (syncToastIdRef.current == null) return
+    // Só mostra sucesso quando isDownloading transiciona de true → false
+    if (wasDownloading && !isDownloading) {
+      toast.success("Músicas sincronizadas!", { id: syncToastIdRef.current })
+      syncToastIdRef.current = null
+    }
+  }, [isDownloading])
 
   // Limpar "justActivated" quando o status real ficar ativado
   useEffect(() => {

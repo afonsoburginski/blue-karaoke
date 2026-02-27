@@ -66,7 +66,6 @@ export function ConfiguracoesDialog({
 
   const handleSincronizar = () => {
     window.dispatchEvent(new CustomEvent("checkNewMusic"))
-    onOpenChange(false)
   }
 
   const handleCheckUpdate = async () => {

@@ -79,6 +79,33 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      # Baixa o mpv portable para Windows e o coloca em src-tauri/resources/
+      # O mpv é usado como player nativo para garantir compatibilidade com Windows 10
+      # (bypassa o WebView2 que tem bugs de GPU compositing no Win10)
+      - name: Download mpv for Windows
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: |
+          $MPV_VERSION = "0.40.0"
+          $MPV_URL = "https://github.com/mpv-player/mpv/releases/download/v${MPV_VERSION}/mpv-x86_64-windows-msvc.zip"
+          $ZIP_PATH = "$env:TEMP\mpv.zip"
+          $RESOURCES_DIR = "desktop\src-tauri\resources"
+
+          New-Item -ItemType Directory -Force -Path $RESOURCES_DIR | Out-Null
+
+          Write-Host "Baixando mpv v${MPV_VERSION}..."
+          try {
+            Invoke-WebRequest -Uri $MPV_URL -OutFile $ZIP_PATH -UseBasicParsing
+            Expand-Archive -Path $ZIP_PATH -DestinationPath "$env:TEMP\mpv-extract" -Force
+            # Copiar mpv.exe e todas as DLLs necessárias para resources
+            Get-ChildItem "$env:TEMP\mpv-extract" -Recurse -Include "*.exe","*.dll" | Copy-Item -Destination $RESOURCES_DIR
+            Write-Host "mpv bundled com sucesso em $RESOURCES_DIR"
+            Get-ChildItem $RESOURCES_DIR | Select-Object Name, Length
+          } catch {
+            Write-Host "AVISO: falha ao baixar mpv ($($_.Exception.Message)) - build continuará sem player nativo"
+          }
+
       # Se aparecer "Detected unsettled top-level await" no log, é warning interno da action; pode ignorar.
       - name: Build Tauri app and create release
         uses: tauri-apps/tauri-action@v0.6.1

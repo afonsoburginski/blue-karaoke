@@ -97,3 +97,25 @@ export async function reindexMusicas(): Promise<ReindexResult> {
 export async function getVideoPath(codigo: string): Promise<string> {
   return invoke("get_video_path", { codigo })
 }
+
+// --- Player nativo (mpv) ---
+
+/** Retorna true se o mpv está disponível no sistema (bundled ou PATH). */
+export async function nativePlayerAvailable(): Promise<boolean> {
+  return invoke("native_player_available")
+}
+
+/** Inicia reprodução nativa via mpv. O path é o caminho local do arquivo de vídeo. */
+export async function playNative(path: string): Promise<void> {
+  return invoke("play_native", { path })
+}
+
+/** Para a reprodução nativa e restaura a janela Tauri. */
+export async function stopNative(): Promise<void> {
+  return invoke("stop_native")
+}
+
+/** Retorna true quando o processo mpv terminou (vídeo acabou). */
+export async function nativePlayerEnded(): Promise<boolean> {
+  return invoke("native_player_ended")
+}

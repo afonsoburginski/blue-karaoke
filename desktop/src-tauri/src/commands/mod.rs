@@ -3,3 +3,4 @@ pub mod historico;
 pub mod ativacao;
 pub mod sync;
 pub mod video;
+pub mod player;
