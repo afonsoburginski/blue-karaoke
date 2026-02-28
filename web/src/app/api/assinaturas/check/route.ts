@@ -1,46 +1,36 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { assinaturas, users } from "@/lib/db/schema"
+import { assinaturas } from "@/lib/db/schema"
+import { requireAuth, CACHE } from "@/lib/api"
 import { eq, desc } from "drizzle-orm"
-import { getCurrentUser } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
-  try {
-    const currentUser = await getCurrentUser()
+  const auth = await requireAuth()
+  if (auth.error) return auth.error
+  const { user } = auth
 
-    if (!currentUser) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const userId = searchParams.get("userId") || user.userId
+
+    // Admin sempre tem assinatura infinita — sem query ao DB
+    if (user.role === "admin") {
       return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
+        {
+          hasSubscription: true,
+          subscription: {
+            id: "admin-infinite",
+            plano: "admin",
+            status: "ativa",
+            dataInicio: new Date(),
+            dataFim: new Date("2099-12-31T23:59:59"),
+            isActive: true,
+          },
+        },
+        { headers: CACHE.SHORT }
       )
     }
 
-    const searchParams = request.nextUrl.searchParams
-    const userId = searchParams.get("userId") || currentUser.userId
-
-    // Verificar role do usuário
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1)
-
-    // Se for admin, sempre considerar como tendo assinatura ativa (infinita)
-    if (user && user.role === "admin") {
-      return NextResponse.json({
-        hasSubscription: true,
-        subscription: {
-          id: "admin-infinite",
-          plano: "admin",
-          status: "ativa",
-          dataInicio: new Date(),
-          dataFim: new Date("2099-12-31T23:59:59"), // Assinatura infinita
-          isActive: true,
-        },
-      })
-    }
-
-    // Buscar assinatura mais recente do usuário
     const [subscription] = await db
       .select()
       .from(assinaturas)
@@ -49,42 +39,35 @@ export async function GET(request: NextRequest) {
       .limit(1)
 
     if (!subscription) {
-      return NextResponse.json(
-        { hasSubscription: false },
-        { status: 200 }
-      )
+      return NextResponse.json({ hasSubscription: false }, { headers: CACHE.SHORT })
     }
 
-    // Verificar se a assinatura está ativa
     const now = new Date()
     const dataFim = new Date(subscription.dataFim)
-    // Assinatura está ativa se: status é "ativa" ou "pendente" E data_fim é maior que agora
-    // Ou se data_fim for muito no futuro (assinatura infinita para admin)
     const isInfinite = dataFim.getTime() > new Date("2090-01-01").getTime()
-    const isActive = 
-      (subscription.status === "ativa" || subscription.status === "pendente") && 
+    const isActive =
+      (subscription.status === "ativa" || subscription.status === "pendente") &&
       (isInfinite || dataFim.getTime() > now.getTime())
 
-    return NextResponse.json({
-      hasSubscription: true,
-      subscription: {
-        id: subscription.id,
-        plano: subscription.plano,
-        status: subscription.status,
-        dataInicio: subscription.dataInicio,
-        dataFim: subscription.dataFim,
-        isActive,
+    return NextResponse.json(
+      {
+        hasSubscription: true,
+        subscription: {
+          id: subscription.id,
+          plano: subscription.plano,
+          status: subscription.status,
+          dataInicio: subscription.dataInicio,
+          dataFim: subscription.dataFim,
+          isActive,
+        },
       },
-    })
+      { headers: CACHE.SHORT }
+    )
   } catch (error: any) {
     console.error("Erro ao verificar assinatura:", error)
     return NextResponse.json(
-      {
-        error: "Erro ao verificar assinatura",
-        details: error.message,
-      },
+      { error: "Erro ao verificar assinatura", details: error.message },
       { status: 500 }
     )
   }
 }
-

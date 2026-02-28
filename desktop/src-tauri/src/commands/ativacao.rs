@@ -147,9 +147,8 @@ async fn try_online_validation(chave: &str) -> Result<AtivacaoStatus, String> {
         Some(chave_data) => {
             log::info!("[ATIVACAO] Online result: status={}, tipo={}, data_expiracao={:?}", 
                 chave_data.status, chave_data.tipo, chave_data.data_expiracao);
-            
+
             if chave_data.status != "ativa" {
-                // Update local to reflect remote status
                 db::remover_ativacao_db().ok();
                 return Ok(AtivacaoStatus {
                     ativada: false,
@@ -160,6 +159,19 @@ async fn try_online_validation(chave: &str) -> Result<AtivacaoStatus, String> {
                     dias_restantes: None,
                     horas_restantes: None,
                 });
+            }
+
+            // ── Verificação de machine binding ─────────────────────────────
+            let machine_id = db::get_or_create_machine_id().ok();
+            if let (Some(ref local_mid), Some(ref remote_mid)) = (&machine_id, &chave_data.machine_id) {
+                if local_mid != remote_mid {
+                    log::warn!("[ATIVACAO] Machine conflict: local={}, remote={}", local_mid, remote_mid);
+                    return Err("Chave em uso em outro dispositivo. Contate o administrador.".to_string());
+                }
+            }
+            // Primeira ativação nesta máquina: vincula o machine_id
+            if let (Some(ref mid), None) = (&machine_id, &chave_data.machine_id) {
+                supabase::vincular_machine_id(&chave_data.id, mid).await.ok();
             }
             
             let now = chrono::Utc::now();
@@ -279,7 +291,24 @@ pub async fn validar_chave(chave: String) -> Result<ValidacaoResult, String> {
                     chave: None,
                 });
             }
-            
+
+            // ── Verificação de machine binding ─────────────────────────────
+            let machine_id = db::get_or_create_machine_id().ok();
+            if let (Some(ref local_mid), Some(ref remote_mid)) = (&machine_id, &chave_data.machine_id) {
+                if local_mid != remote_mid {
+                    log::warn!("[ATIVACAO] Tentativa de usar chave de outra máquina");
+                    return Ok(ValidacaoResult {
+                        valida: false,
+                        error: Some("Chave em uso em outro dispositivo. Contate o administrador para desbloquear.".to_string()),
+                        chave: None,
+                    });
+                }
+            }
+            // Primeira ativação: vincula machine_id
+            if let (Some(ref mid), None) = (&machine_id, &chave_data.machine_id) {
+                supabase::vincular_machine_id(&chave_data.id, mid).await.ok();
+            }
+
             let now = chrono::Utc::now();
             let mut dias_restantes = None;
             let mut horas_restantes = None;

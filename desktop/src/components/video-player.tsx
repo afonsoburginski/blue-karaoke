@@ -18,8 +18,9 @@ import {
 } from "@/lib/tauri"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { convertFileSrc } from "@tauri-apps/api/core"
+import { useAtalhos } from "@/hooks/use-atalhos"
+import { matchKey, formatarTecla, keyFromEvent } from "@/lib/atalhos"
 
-const HOLD_DURATION = 800
 
 export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
   const navigate = useNavigate()
@@ -27,13 +28,14 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
   const { status: ativacaoStatus } = useAtivacao()
   const isModoMaquina = ativacaoStatus.tipo === "maquina"
 
-  const [holdProgress, setHoldProgress] = useState(0)
-  const [isHolding, setIsHolding] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
   const [transitionToNextSong, setTransitionToNextSong] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [videoError, setVideoError] = useState<string | null>(null)
+  // Preview da música ao digitar código numérico
+  const [previewMusica, setPreviewMusica] = useState<MusicaSimple | null | "loading" | "not_found">(null)
+  const previewMusicaRef = useRef<MusicaSimple | null | "loading" | "not_found">(null)
 
   // Paths: rawPath para mpv nativo, videoSrc para <video> HTML5 (fallback)
   const [rawPath, setRawPath] = useState<string | null>(null)
@@ -43,12 +45,14 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
   const [useNativePlayer, setUseNativePlayer] = useState<boolean | undefined>(undefined)
   const nativeStartedRef = useRef(false)
 
-  const holdStartRef = useRef<number | null>(null)
-  const animationFrameRef = useRef<number | null>(null)
+  const { getKey } = useAtalhos()
+
   const hasFinishedRef = useRef(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Evita múltiplas navegações por pressões rápidas de tecla (C / aleatória)
+  const isChangingSongRef = useRef(false)
 
   // --- Normalização do caminho ---
   useEffect(() => {
@@ -175,65 +179,40 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
     return () => video.removeEventListener("canplay", tryPlay)
   }, [videoSrc, useNativePlayer])
 
-  // --- Hold (segurar Enter para finalizar) ---
-  const updateHoldProgress = useCallback(() => {
-    if (!holdStartRef.current) return
-    const elapsed = Date.now() - holdStartRef.current
-    const progress = Math.min(elapsed / HOLD_DURATION, 1)
-    setHoldProgress(progress)
-    if (progress >= 1) {
-      handleVideoEnd()
-    } else {
-      animationFrameRef.current = requestAnimationFrame(updateHoldProgress)
-    }
-  }, [handleVideoEnd])
 
-  const startHold = useCallback(() => {
-    if (hasFinishedRef.current || isExiting) return
-    holdStartRef.current = Date.now()
-    setIsHolding(true)
-    setHoldProgress(0)
-    animationFrameRef.current = requestAnimationFrame(updateHoldProgress)
-  }, [updateHoldProgress, isExiting])
-
-  const cancelHold = useCallback(() => {
-    if (isExiting) return
-    holdStartRef.current = null
-    setIsHolding(false)
-    setHoldProgress(0)
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
-      animationFrameRef.current = null
-    }
-  }, [isExiting])
-
-  // --- Adicionar à fila ao digitar 4-5 dígitos ---
+  // --- Preview de música ao digitar código numérico (4-5 dígitos) ---
+  // Não adiciona à fila automaticamente — usuário confirma com Enter
   useEffect(() => {
-    const codigo = searchQuery.replace(/\D/g, "")
-    if (codigo.length < 4 || codigo.length > 5) return
-    const codigoNorm = codigo.padStart(5, "0")
+    const isOnlyDigits = searchQuery.length > 0 && /^\d+$/.test(searchQuery)
+    const digits = searchQuery.replace(/\D/g, "")
+
+    if (!isOnlyDigits || digits.length < 4 || digits.length > 5) {
+      const next = null
+      setPreviewMusica(next)
+      previewMusicaRef.current = next
+      return
+    }
+
+    const codigoNorm = digits.padStart(5, "0")
     if (/^0+$/.test(codigoNorm)) return
+
+    setPreviewMusica("loading")
+    previewMusicaRef.current = "loading"
     let cancelled = false
     getMusicaByCodigo(codigoNorm)
       .then((data) => {
         if (cancelled) return
-        if (data) {
-          addToFila({ codigo: data.codigo, titulo: data.titulo, artista: data.artista ?? "" })
-          toast.success(
-            <div className="space-y-1 py-0.5">
-              <p className="text-lg font-semibold leading-tight">{data.titulo}</p>
-              <p className="text-base text-stone-600">para tocar como próxima</p>
-            </div>,
-            { duration: 4000, className: "min-w-[340px]" }
-          )
-        } else {
-          toast.error("Código não encontrado")
-        }
+        const next = data ?? "not_found"
+        setPreviewMusica(next)
+        previewMusicaRef.current = next
       })
-      .catch(() => { if (!cancelled) toast.error("Erro ao verificar código") })
-      .finally(() => { if (!cancelled) setSearchQuery("") })
+      .catch(() => {
+        if (cancelled) return
+        setPreviewMusica("not_found")
+        previewMusicaRef.current = "not_found"
+      })
     return () => { cancelled = true }
-  }, [searchQuery, addToFila])
+  }, [searchQuery])
 
   // --- Listener de teclado ---
   useEffect(() => {
@@ -246,33 +225,47 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         target.closest("textarea") ||
         target.isContentEditable
 
+      // F12 = abrir configurações (fixo)
       if (e.key === "F12") {
         e.preventDefault()
         setConfigDialogOpen(true)
         return
       }
-      if (e.key === "Escape" && !configDialogOpen) {
+
+      // Fechar app
+      if (matchKey(e, getKey("fechar")) && !configDialogOpen) {
         e.preventDefault()
         getCurrentWindow().close()
         return
       }
-      if (e.key === " " && !isSearchInput && !configDialogOpen) {
+
+      // Minimizar
+      if (matchKey(e, getKey("minimizar")) && !isSearchInput && !configDialogOpen) {
         e.preventDefault()
         getCurrentWindow().minimize()
         return
       }
-      if (e.code === "Delete" || e.key === "Delete" || e.code === "NumpadDecimal") {
+
+      // Cancelar: se há busca ativa, limpa; caso contrário sai do player
+      if (matchKey(e, getKey("cancelar")) || e.code === "NumpadDecimal") {
         e.preventDefault()
-        if (useNativePlayer) stopNative().catch(() => {})
-        else videoRef.current?.pause()
-        navigate("/")
+        if (searchQuery.length > 0) {
+          setSearchQuery("")
+          setPreviewMusica(null)
+          previewMusicaRef.current = null
+        } else {
+          if (useNativePlayer) stopNative().catch(() => {})
+          else videoRef.current?.pause()
+          navigate("/")
+        }
         return
       }
-      if (e.key === "+") {
+
+      // Reiniciar música
+      if (matchKey(e, getKey("reiniciar"))) {
         e.preventDefault()
         setVideoError(null)
         if (useNativePlayer && rawPath) {
-          // Reiniciar: parar e relançar mpv
           stopNative().then(() => {
             nativeStartedRef.current = false
             hasFinishedRef.current = false
@@ -285,19 +278,33 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         }
         return
       }
-      if (e.key === "c" || e.key === "C") {
+
+      // Tocar aleatória — debounce para evitar múltiplas navegações
+      if (matchKey(e, getKey("aleatorio"))) {
         e.preventDefault()
+        if (isChangingSongRef.current) return
+        isChangingSongRef.current = true
+        toast.loading("Buscando música aleatória…", { id: "aleatorio", duration: 5000 })
         musicaAleatoria()
           .then((cod) => {
-            if (cod) navigate(`/tocar?c=${encodeURIComponent(cod)}`)
-            else toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
+            if (cod) {
+              toast.dismiss("aleatorio")
+              navigate(`/tocar?c=${encodeURIComponent(cod)}`)
+            } else {
+              isChangingSongRef.current = false
+              toast.info("Nenhuma música baixada. Pressione * para sincronizar.", { id: "aleatorio" })
+            }
           })
-          .catch(() => toast.error("Erro ao buscar música aleatória."))
+          .catch(() => {
+            isChangingSongRef.current = false
+            toast.error("Erro ao buscar música aleatória.", { id: "aleatorio" })
+          })
         return
       }
-      if (e.key === "p" || e.key === "P") {
+
+      // Pausar / retomar reprodução
+      if (matchKey(e, getKey("pausar"))) {
         e.preventDefault()
-        // Pausa não disponível no player nativo (mpv sem IPC); no fallback pausa o <video>
         if (!useNativePlayer) {
           const video = videoRef.current
           if (video) {
@@ -307,24 +314,50 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         }
         return
       }
-      if (e.key === "Enter" && !e.repeat) {
-        if (isSearchInput || searchQuery.length > 0) {
-          if (searchQuery.length > 0) {
-            e.preventDefault()
-            window.dispatchEvent(new CustomEvent("tocar-search-submit"))
-          }
-          return
+
+      if (e.key === "Enter" && !e.repeat && searchQuery.length > 0) {
+        e.preventDefault()
+        const preview = previewMusicaRef.current
+        if (preview && preview !== "loading" && preview !== "not_found") {
+          // Código numérico confirmado — adiciona à fila
+          addToFila({ codigo: preview.codigo, titulo: preview.titulo, artista: preview.artista ?? "" })
+          toast.success(
+            <div className="space-y-1 py-0.5">
+              <p className="text-lg font-semibold leading-tight">{preview.titulo}</p>
+              <p className="text-base text-stone-600">adicionada como próxima</p>
+            </div>,
+            { duration: 4000, className: "min-w-[340px]" }
+          )
+          setSearchQuery("")
+        } else {
+          // Busca por texto — delega ao UnifiedSearch
+          window.dispatchEvent(new CustomEvent("tocar-search-submit"))
         }
-        startHold()
         return
       }
+
       if (!isSearchInput) {
         if (!isExiting && e.key === "Backspace" && !e.repeat && searchQuery.length > 0) {
           e.preventDefault()
           setSearchQuery((prev) => prev.slice(0, -1))
           return
         }
-        if (e.code === "NumpadDecimal") return
+        // Nunca adiciona ao search uma tecla que seja atalho do sistema
+        const tecla = keyFromEvent(e)
+        const isAtalho =
+          matchKey(e, getKey("cancelar")) ||
+          matchKey(e, getKey("reiniciar")) ||
+          matchKey(e, getKey("aleatorio")) ||
+          matchKey(e, getKey("pausar")) ||
+          matchKey(e, getKey("fechar")) ||
+          matchKey(e, getKey("minimizar")) ||
+          e.code === "NumpadDecimal" ||
+          e.key === "Delete" ||
+          tecla === getKey("cancelar")
+        if (isAtalho) {
+          e.preventDefault()
+          return
+        }
         if (!isExiting && !e.repeat && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault()
           setSearchQuery((prev) => prev + e.key)
@@ -332,30 +365,34 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
       }
     }
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      const isSearchInput =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.closest("input") ||
-        target.closest("textarea") ||
-        target.isContentEditable
-      if (e.key === "Enter" && !isSearchInput) cancelHold()
-    }
-
     document.addEventListener("keydown", handleKeyDown, { capture: true })
-    document.addEventListener("keyup", handleKeyUp, { capture: true })
     return () => {
       document.removeEventListener("keydown", handleKeyDown, { capture: true })
-      document.removeEventListener("keyup", handleKeyUp, { capture: true })
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
     }
-  }, [startHold, cancelHold, navigate, isExiting, searchQuery, configDialogOpen, useNativePlayer, rawPath])
+  }, [navigate, isExiting, searchQuery, configDialogOpen, useNativePlayer, rawPath, getKey, addToFila])
 
   // Foco no container para teclas funcionarem
   useEffect(() => {
     containerRef.current?.focus()
   }, [])
+
+  // Torna body/html completamente transparente quando o player nativo está ativo,
+  // para que o vídeo da janela Win32 (abaixo do WebView2) apareça visível.
+  useEffect(() => {
+    if (useNativePlayer !== true) return
+    const html = document.documentElement
+    const body = document.body
+    const prevHtmlBg = html.style.background
+    const prevBodyBg = body.style.background
+    html.setAttribute("data-native-player", "true")
+    html.style.background = "transparent"
+    body.style.background = "transparent"
+    return () => {
+      html.removeAttribute("data-native-player")
+      html.style.background = prevHtmlBg
+      body.style.background = prevBodyBg
+    }
+  }, [useNativePlayer])
 
   // Enquanto detecta disponibilidade do player, mostra preto
   if (useNativePlayer === undefined) {
@@ -388,104 +425,120 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         </div>
       )}
 
-      {/* Barra de ferramentas ao pesquisar */}
-      {searchQuery.length > 0 && (
-        <div className="absolute left-0 right-0 z-20 top-36 md:top-40 bg-stone-100/90 backdrop-blur-sm shadow-md py-3 px-8 flex flex-wrap items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setConfigDialogOpen(true)}
-            className="inline-flex items-center gap-2 text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-            title="Configurações (F12)"
-          >
-            <Settings className="h-5 w-5 opacity-70" aria-hidden />
-            Configurações (F12)
-          </button>
-          <span className="text-stone-400 select-none">·</span>
-          <button
-            type="button"
-            onClick={() => {
-              musicaAleatoria()
-                .then((cod) => { if (cod) navigate(`/tocar?c=${encodeURIComponent(cod)}`); else toast.info("Nenhuma música baixada.") })
-                .catch(() => toast.error("Erro ao buscar música aleatória."))
-            }}
-            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-          >
-            Tocar aleatória (C)
-          </button>
-          <span className="text-stone-400 select-none">·</span>
-          <button
-            type="button"
-            onClick={() => {
-              if (!useNativePlayer) {
-                const v = videoRef.current
-                if (v) { if (v.paused) v.play().catch(() => {}); else v.pause() }
-              }
-            }}
-            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-          >
-            Pausar (P)
-          </button>
-          <span className="text-stone-400 select-none">·</span>
-          <button
-            type="button"
-            onClick={() => {
-              if (useNativePlayer && rawPath) {
-                stopNative().then(() => { nativeStartedRef.current = false; hasFinishedRef.current = false; if (rawPath) playNative(rawPath).catch(() => {}) }).catch(() => {})
-              } else {
-                const v = videoRef.current
-                if (v) { v.currentTime = 0; v.play().catch(() => {}) } else navigate("/")
-              }
-            }}
-            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-          >
-            Reiniciar (+)
-          </button>
-          <span className="text-stone-400 select-none">·</span>
-          <button
-            type="button"
-            onClick={() => { if (useNativePlayer) stopNative().catch(() => {}); else videoRef.current?.pause(); navigate("/") }}
-            className="text-lg text-stone-800 hover:text-stone-900 hover:underline cursor-pointer bg-transparent border-0 p-0 font-normal"
-          >
-            Cancelar (Delete)
-          </button>
-        </div>
-      )}
+      {/* Overlay de busca — próxima música */}
+      {searchQuery.length > 0 && (() => {
+        const isCodeMode = /^\d+$/.test(searchQuery)
+        const digits = searchQuery.replace(/\D/g, "")
+        const slots = [0, 1, 2, 3, 4]
+        const canConfirm = previewMusica && previewMusica !== "loading" && previewMusica !== "not_found"
 
-      {/* Barra de busca ao pesquisar */}
-      {searchQuery.length > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 min-h-48 bg-stone-100/90 backdrop-blur-sm flex flex-col justify-center pl-8 pr-8 py-4 gap-3">
-          <p className="text-stone-800 text-xl font-medium">
-            Próxima música — digite o código ou busque por nome/artista
-          </p>
-          <UnifiedSearch
-            value={searchQuery}
-            onChange={setSearchQuery}
-            tipoChave={ativacaoStatus.tipo}
-            onSelectCodigo={(codigo, info) => {
-              addToFila({ codigo, titulo: info?.titulo, artista: info?.artista })
-              const titulo = info?.titulo ?? "Música"
-              toast.success(
-                <div className="space-y-1 py-0.5">
-                  <p className="text-lg font-semibold leading-tight">{titulo}</p>
-                  <p className="text-base text-stone-600">para tocar como próxima</p>
-                </div>,
-                { duration: 4000, className: "min-w-[340px]" }
-              )
-              setSearchQuery("")
-            }}
-          />
-          <p className="text-stone-600 text-lg">
-            O que você digita no teclado aparece aqui. Enter no resultado ou 5 dígitos adiciona à fila.
-          </p>
-        </div>
-      )}
+        return (
+          <div className="absolute bottom-0 left-0 right-0 z-20 bg-stone-950/95 backdrop-blur-md border-t border-stone-800/60">
+            {isCodeMode ? (
+              /* ── Modo código numérico ─────────────────────────── */
+              <div className="px-8 py-6 flex flex-col gap-5">
+                <p className="text-stone-400 text-base uppercase tracking-widest font-medium select-none">
+                  Próxima música — código
+                </p>
+
+                {/* Slots de dígitos + preview lado a lado */}
+                <div className="flex items-center gap-6 flex-wrap">
+                  {/* Slots */}
+                  <div className="flex gap-2">
+                    {slots.map((i) => {
+                      const char = digits[i]
+                      const isActive = i === digits.length
+                      return (
+                        <div
+                          key={i}
+                          className={`w-14 h-16 flex items-center justify-center rounded-xl border-2 text-3xl font-mono font-bold transition-all ${
+                            char
+                              ? "border-cyan-400 bg-cyan-400/10 text-white"
+                              : isActive
+                              ? "border-cyan-400/50 bg-stone-800 text-stone-600 animate-pulse"
+                              : "border-stone-700 bg-stone-900 text-stone-700"
+                          }`}
+                        >
+                          {char ?? "·"}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Preview da música */}
+                  <div className="flex-1 min-w-0">
+                    {previewMusica === "loading" && (
+                      <div className="flex items-center gap-3 text-stone-400">
+                        <div className="w-5 h-5 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-lg">Buscando...</span>
+                      </div>
+                    )}
+                    {canConfirm && (
+                      <div className="space-y-1">
+                        <p className="text-white text-2xl font-semibold leading-tight truncate">
+                          {(previewMusica as MusicaSimple).titulo}
+                        </p>
+                        <p className="text-stone-400 text-lg truncate">
+                          {(previewMusica as MusicaSimple).artista ?? "—"}
+                        </p>
+                      </div>
+                    )}
+                    {previewMusica === "not_found" && digits.length >= 4 && (
+                      <p className="text-red-400 text-lg font-medium">Código não encontrado</p>
+                    )}
+                    {!previewMusica && digits.length < 4 && (
+                      <p className="text-stone-600 text-lg">
+                        {5 - digits.length} dígito{5 - digits.length !== 1 ? "s" : ""} restante{5 - digits.length !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Instrução */}
+                <p className="text-stone-600 text-sm select-none">
+                  {canConfirm
+                    ? <><span className="text-cyan-400 font-mono">Enter</span> para adicionar à fila · <span className="font-mono">←</span> para apagar · <span className="text-stone-500 font-mono">{formatarTecla(getKey("cancelar"))}</span> para cancelar</>
+                    : <><span className="font-mono">←</span> para apagar · <span className="text-stone-500 font-mono">{formatarTecla(getKey("cancelar"))}</span> para cancelar</>
+                  }
+                </p>
+              </div>
+            ) : (
+              /* ── Modo busca por texto ─────────────────────────── */
+              <div className="px-8 py-5 flex flex-col gap-3">
+                <p className="text-stone-400 text-base uppercase tracking-widest font-medium select-none">
+                  Próxima música — busca por nome / artista
+                </p>
+                <UnifiedSearch
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  tipoChave={ativacaoStatus.tipo}
+                  onSelectCodigo={(codigo, info) => {
+                    addToFila({ codigo, titulo: info?.titulo, artista: info?.artista })
+                    toast.success(
+                      <div className="space-y-1 py-0.5">
+                        <p className="text-lg font-semibold leading-tight">{info?.titulo ?? "Música"}</p>
+                        <p className="text-base text-stone-600">adicionada como próxima</p>
+                      </div>,
+                      { duration: 4000, className: "min-w-[340px]" }
+                    )
+                    setSearchQuery("")
+                  }}
+                />
+                <p className="text-stone-600 text-sm select-none">
+                  <span className="text-stone-500 font-mono">{formatarTecla(getKey("cancelar"))}</span> para cancelar
+                </p>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Vídeo HTML5 — só renderiza quando mpv NÃO está disponível (fallback) */}
       {useNativePlayer === false && videoSrc && (
         <video
           ref={videoRef}
           tabIndex={-1}
-          className={`absolute inset-0 w-full h-full bg-black ${isModoMaquina ? "object-cover" : "object-contain"}`}
+          className="absolute inset-0 w-full h-full bg-black object-contain"
           src={videoSrc}
           autoPlay
           muted={false}
@@ -511,8 +564,11 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
             <p className="text-red-400 text-2xl font-semibold">Não foi possível reproduzir</p>
             <p className="text-white/60 text-lg">{videoError}</p>
             <p className="text-white/40 text-base">
-              Pressione <span className="text-cyan-400 font-mono">+</span> para tentar novamente ou{" "}
-              <span className="text-cyan-400 font-mono">Delete</span> para voltar
+              Pressione{" "}
+              <span className="text-cyan-400 font-mono">{formatarTecla(getKey("reiniciar"))}</span>{" "}
+              para tentar novamente ou{" "}
+              <span className="text-cyan-400 font-mono">{formatarTecla(getKey("cancelar"))}</span>{" "}
+              para voltar
             </p>
           </div>
         </div>
@@ -528,44 +584,16 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         </div>
       )}
 
-      {/* Indicador de hold */}
-      {isHolding && !isExiting && (
-        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <div className="flex flex-col items-center gap-4 bg-black/40 backdrop-blur-sm rounded-3xl p-8">
-            <div className="relative w-36 h-36">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="45" stroke="rgba(255,255,255,0.15)" strokeWidth="6" fill="none" />
-                <circle
-                  cx="50" cy="50" r="45"
-                  stroke="url(#gradient)" strokeWidth="6" fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray={`${holdProgress * 283} 283`}
-                />
-                <defs>
-                  <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#a855f7" />
-                    <stop offset="50%" stopColor="#22d3ee" />
-                    <stop offset="100%" stopColor="#ec4899" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-white text-3xl font-bold drop-shadow-lg">
-                  {Math.round(holdProgress * 100)}%
-                </span>
-              </div>
-            </div>
-            <p className="text-white text-xl font-semibold drop-shadow-lg">Finalizando...</p>
-          </div>
-        </div>
-      )}
 
       {/* Instrução no canto inferior (oculta no modo máquina) */}
       {!isExiting && !isModoMaquina && (
         <div className="absolute bottom-6 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <div className="bg-black/30 backdrop-blur-sm px-4 py-2 rounded-full">
             <p className="text-white/40 text-lg">
-              Segure <span className="text-cyan-400/60 font-mono">Enter</span> para finalizar
+              <span className="text-cyan-400/40 font-mono">{formatarTecla(getKey("cancelar"))}</span>{" "}
+              para sair ·{" "}
+              <span className="text-cyan-400/40 font-mono">{formatarTecla(getKey("aleatorio"))}</span>{" "}
+              aleatória
             </p>
           </div>
         </div>

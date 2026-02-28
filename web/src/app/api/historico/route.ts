@@ -1,63 +1,90 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db, historico, musicas, users } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
-import { eq, desc, and, sql } from "drizzle-orm"
+import { db, historico, musicas } from "@/lib/db"
+import { requireAuth, CACHE } from "@/lib/api"
+import { eq, desc, and, gte, sql } from "drizzle-orm"
+
+function getFilterStartDate(filter: string | null): Date | null {
+  if (!filter || filter === "all") return null
+  const now = new Date()
+  switch (filter) {
+    case "today":
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    case "week":
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    case "month":
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    default:
+      return null
+  }
+}
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth()
+  if (auth.error) return auth.error
+  const { user } = auth
+
   try {
-    const currentUser = await getCurrentUser()
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      )
-    }
-
-    // Buscar usuário completo para verificar role
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, currentUser.userId))
-      .limit(1)
-
     const searchParams = request.nextUrl.searchParams
-    const limit = parseInt(searchParams.get("limit") || "50")
-    const filter = searchParams.get("filter") // today, week, month, all
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 500)
+    const filter = searchParams.get("filter")
+    const startDate = getFilterStartDate(filter)
 
-    // Build where conditions
-    // Se for admin, não filtrar por userId (ver todo o histórico)
-    const whereConditions = user?.role === "admin" 
-      ? [] 
-      : [eq(historico.userId, currentUser.userId)]
+    // Montar condições WHERE: admins veem tudo, usuários apenas o próprio histórico
+    const baseConditions = user.role === "admin"
+      ? []
+      : [eq(historico.userId, user.userId)]
 
-    // Note: Date filtering is done client-side below since Drizzle doesn't have direct date comparison support
-    // The where clause only filters by userId
+    // Filtro de data no banco — evita buscar registros desnecessários
+    if (startDate) baseConditions.push(gte(historico.dataExecucao, startDate))
 
-    let query = db
-      .select({
-        id: historico.id,
-        userId: historico.userId,
-        musicaId: historico.musicaId,
-        codigo: historico.codigo,
-        dataExecucao: historico.dataExecucao,
-        musica: {
-          id: musicas.id,
+    const whereClause = baseConditions.length > 0 ? and(...baseConditions) : undefined
+
+    // Executa histórico e mais tocadas em paralelo (2 queries → mesmo round-trip)
+    const mostPlayedConditions = user.role === "admin"
+      ? []
+      : [eq(historico.userId, user.userId)]
+    const mostPlayedWhere = mostPlayedConditions.length > 0
+      ? and(...mostPlayedConditions)
+      : undefined
+
+    const [history, mostPlayed] = await Promise.all([
+      db
+        .select({
+          id: historico.id,
+          userId: historico.userId,
+          musicaId: historico.musicaId,
+          codigo: historico.codigo,
+          dataExecucao: historico.dataExecucao,
+          musica: {
+            id: musicas.id,
+            titulo: musicas.titulo,
+            artista: musicas.artista,
+            duracao: musicas.duracao,
+          },
+        })
+        .from(historico)
+        .leftJoin(musicas, eq(historico.musicaId, musicas.id))
+        .where(whereClause)
+        .orderBy(desc(historico.dataExecucao))
+        .limit(limit),
+
+      db
+        .select({
+          musicaId: historico.musicaId,
+          codigo: historico.codigo,
+          vezesTocada: sql<number>`count(*)::int`.as("vezes_tocada"),
           titulo: musicas.titulo,
           artista: musicas.artista,
           duracao: musicas.duracao,
-        },
-      })
-      .from(historico)
-      .leftJoin(musicas, eq(historico.musicaId, musicas.id))
+        })
+        .from(historico)
+        .leftJoin(musicas, eq(historico.musicaId, musicas.id))
+        .where(mostPlayedWhere)
+        .groupBy(historico.musicaId, historico.codigo, musicas.titulo, musicas.artista, musicas.duracao)
+        .orderBy(desc(sql`count(*)`))
+        .limit(10),
+    ])
 
-    if (whereConditions.length > 0) {
-      query = query.where(and(...whereConditions)) as any
-    }
-
-    const history = await query.orderBy(desc(historico.dataExecucao)).limit(limit)
-
-    // Garantir dataExecucao como ISO string para o cliente
     const historyNormalized = history.map((h) => ({
       ...h,
       dataExecucao:
@@ -76,55 +103,7 @@ export async function GET(request: NextRequest) {
         : null,
     }))
 
-    // Filtrar por data no cliente (temporário)
-    let filteredHistory = historyNormalized
-    if (filter && filter !== "all") {
-      const now = new Date()
-      let startDate: Date
-
-      switch (filter) {
-        case "today":
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-          break
-        case "week":
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          break
-        case "month":
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-          break
-        default:
-          startDate = new Date(0)
-      }
-
-      filteredHistory = historyNormalized.filter(
-        (item) => new Date(item.dataExecucao).getTime() >= startDate.getTime()
-      )
-    }
-
-    // Buscar músicas mais tocadas (agregado)
-    // Se for admin, buscar de todos os usuários, senão apenas do usuário atual
-    let mostPlayedQuery = db
-      .select({
-        musicaId: historico.musicaId,
-        codigo: historico.codigo,
-        vezesTocada: sql<number>`count(*)::int`.as("vezes_tocada"),
-        titulo: musicas.titulo,
-        artista: musicas.artista,
-        duracao: musicas.duracao,
-      })
-      .from(historico)
-      .leftJoin(musicas, eq(historico.musicaId, musicas.id))
-
-    if (user?.role !== "admin") {
-      mostPlayedQuery = mostPlayedQuery.where(eq(historico.userId, currentUser.userId)) as any
-    }
-
-    const mostPlayed = await mostPlayedQuery
-      .groupBy(historico.musicaId, historico.codigo, musicas.titulo, musicas.artista, musicas.duracao)
-      .orderBy(desc(sql`count(*)`))
-      .limit(10)
-
-    const mostPlayedMapped = mostPlayed.map(item => ({
+    const maisTocadas = mostPlayed.map((item) => ({
       musicaId: item.musicaId,
       codigo: item.codigo,
       vezesTocada: Number(item.vezesTocada),
@@ -133,30 +112,22 @@ export async function GET(request: NextRequest) {
       duracao: item.duracao,
     }))
 
-    return NextResponse.json({ 
-      historico: filteredHistory,
-      maisTocadas: mostPlayedMapped
-    })
+    return NextResponse.json(
+      { historico: historyNormalized, maisTocadas },
+      { headers: CACHE.SHORT }
+    )
   } catch (error) {
     console.error("Erro ao buscar histórico:", error)
-    return NextResponse.json(
-      { error: "Erro ao buscar histórico" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro ao buscar histórico" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (auth.error) return auth.error
+  const { user } = auth
+
   try {
-    const currentUser = await getCurrentUser()
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      )
-    }
-
     const body = await request.json()
     const { musicaId, codigo } = body
 
@@ -169,20 +140,12 @@ export async function POST(request: NextRequest) {
 
     const [newHistorico] = await db
       .insert(historico)
-      .values({
-        userId: currentUser.userId,
-        musicaId,
-        codigo,
-      })
+      .values({ userId: user.userId, musicaId, codigo })
       .returning()
 
     return NextResponse.json({ historico: newHistorico }, { status: 201 })
   } catch (error) {
     console.error("Erro ao criar histórico:", error)
-    return NextResponse.json(
-      { error: "Erro ao criar histórico" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro ao criar histórico" }, { status: 500 })
   }
 }
-

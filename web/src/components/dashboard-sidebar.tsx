@@ -18,15 +18,18 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import {
-  Home,
   Music,
   History,
   LogOut,
   User,
+  Users,
   CreditCard,
   Download,
   Monitor,
   Globe,
+  Palette,
+  LayoutDashboard,
+  ShieldCheck,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -196,56 +199,61 @@ export function DashboardSidebar({
     return "U"
   }
 
-  const menuItems = [
-    // Dashboard e Histórico só para admins
-    ...(userRole === "admin"
-      ? [
-          {
-            title: "Dashboard",
-            icon: Home,
-            url: slug ? `/${slug}` : "/",
-          },
-          {
-            title: "Histórico",
-            icon: History,
-            url: slug ? `/${slug}/historico` : "/historico",
-          },
-          {
-            title: "Admin",
-            icon: User,
-            url: slug ? `/${slug}/admin/usuarios` : "/admin/usuarios",
-            adminOnly: true,
-          },
-        ]
-      : []),
-    {
+  const makeItem = <T extends { url: string }>(item: T) => {
+    const dashboardUrl = slug ? `/${slug}` : "/"
+    const isDashboard = item.url === dashboardUrl
+    return {
+      ...item,
+      isActive: isDashboard
+        ? pathname === item.url
+        : (pathname?.startsWith(item.url) ?? false),
+    }
+  }
+
+  // Itens de navegação principal (visíveis para todos)
+  const mainItems = [
+    userRole === "admin" && makeItem({
+      title: "Dashboard",
+      icon: LayoutDashboard,
+      url: slug ? `/${slug}` : "/",
+    }),
+    userRole === "admin" && makeItem({
+      title: "Histórico",
+      icon: History,
+      url: slug ? `/${slug}/historico` : "/historico",
+    }),
+    makeItem({
       title: "Músicas",
       icon: Music,
       url: slug ? `/${slug}/musicas` : "/musicas",
-    },
-    {
+    }),
+    makeItem({
       title: "Perfil",
       icon: User,
       url: slug ? `/${slug}/perfil` : "/perfil",
-    },
-  ].map((item) => {
-    const dashboardUrl = slug ? `/${slug}` : "/"
-    const isDashboard = item.url === dashboardUrl
-    
-    // Para dashboard, só está ativo se for exatamente a URL (não pode ter sub-rotas)
-    if (isDashboard) {
-      return {
-        ...item,
-        isActive: pathname === item.url,
-      }
-    }
-    
-    // Para outras rotas, está ativo se o pathname começar com a URL
-    return {
-      ...item,
-      isActive: pathname?.startsWith(item.url) || false,
-    }
-  })
+    }),
+  ].filter(Boolean) as ReturnType<typeof makeItem>[]
+
+  // Itens exclusivos de administração (visíveis apenas para admins)
+  const adminItems = userRole === "admin"
+    ? [
+        makeItem({
+          title: "Usuários",
+          icon: Users,
+          url: slug ? `/${slug}/admin/usuarios` : "/admin/usuarios",
+        }),
+        makeItem({
+          title: "Chaves",
+          icon: ShieldCheck,
+          url: slug ? `/${slug}/admin/chaves` : "/admin/chaves",
+        }),
+        makeItem({
+          title: "Aparência",
+          icon: Palette,
+          url: slug ? `/${slug}/admin/aparencia` : "/admin/aparencia",
+        }),
+      ]
+    : []
 
   return (
     <Sidebar collapsible="icon">
@@ -267,11 +275,12 @@ export function DashboardSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        {/* ── Navegação principal ───────────────────────────────── */}
         <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
+          <SidebarGroupLabel>Navegação</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -288,6 +297,34 @@ export function DashboardSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* ── Administração (somente admins) ────────────────────── */}
+        {adminItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+              <ShieldCheck className="h-3 w-3" />
+              Administração
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={item.isActive}
+                      tooltip={item.title}
+                    >
+                      <a href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Card de Assinatura - Apenas para usuários com role "user" */}
         {userRole === "user" && !isLoadingSubscription && subscription && (

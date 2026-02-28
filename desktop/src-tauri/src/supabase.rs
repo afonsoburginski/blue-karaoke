@@ -50,6 +50,9 @@ pub struct SupabaseChave {
     pub limite_tempo: Option<f64>,
     pub user_id: Option<serde_json::Value>,
     pub ultimo_uso: Option<String>,
+    /// Identificador único da máquina que ativou esta chave.
+    /// None = ainda não ativada em nenhuma máquina.
+    pub machine_id: Option<String>,
     // Accept any extra fields from Supabase without failing
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, serde_json::Value>,
@@ -152,17 +155,14 @@ pub async fn check_assinatura(user_id: &str) -> Result<Option<SupabaseAssinatura
     Ok(assinaturas.into_iter().next())
 }
 
-/// Update last use timestamp for a key
+/// Update last use timestamp for a key (optionally vincula machine_id na primeira vez)
 pub async fn update_ultimo_uso(chave_id: &str) -> Result<(), String> {
     let url = supabase_url();
     let key = supabase_key();
 
     let now = chrono::Utc::now().to_rfc3339();
     client()
-        .patch(format!(
-            "{}/rest/v1/chaves_ativacao?id=eq.{}",
-            url, chave_id
-        ))
+        .patch(format!("{}/rest/v1/chaves_ativacao?id=eq.{}", url, chave_id))
         .header("apikey", &key)
         .header("Authorization", format!("Bearer {}", key))
         .header("Content-Type", "application/json")
@@ -172,6 +172,35 @@ pub async fn update_ultimo_uso(chave_id: &str) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+/// Vincula o machine_id a uma chave (primeira ativação nesta máquina).
+/// Só deve ser chamado quando machine_id da chave for None.
+pub async fn vincular_machine_id(chave_id: &str, machine_id: &str) -> Result<(), String> {
+    let url = supabase_url();
+    let key = supabase_key();
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let resp = client()
+        .patch(format!("{}/rest/v1/chaves_ativacao?id=eq.{}", url, chave_id))
+        .header("apikey", &key)
+        .header("Authorization", format!("Bearer {}", key))
+        .header("Content-Type", "application/json")
+        .header("Prefer", "return=minimal")
+        .json(&serde_json::json!({
+            "machine_id": machine_id,
+            "usado_em": now,
+            "ultimo_uso": now,
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Supabase error: {}", resp.status()));
+    }
+    log::info!("[SUPABASE] machine_id vinculado: {} → {}", chave_id, machine_id);
     Ok(())
 }
 

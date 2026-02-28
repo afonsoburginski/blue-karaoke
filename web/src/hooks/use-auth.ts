@@ -1,6 +1,7 @@
 "use client"
 
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMemo } from "react"
 import { authClient } from "@/lib/auth-client"
 import { createSlug } from "@/lib/slug"
 
@@ -51,16 +52,33 @@ export function useAuth() {
   })
 
   const sessionUser = data?.session?.user
-  const user: User | null = sessionUser
-    ? {
-        id: sessionUser.id,
-        slug: sessionUser.slug ?? createSlug(sessionUser.name || sessionUser.email.split("@")[0]),
-        name: sessionUser.name ?? "",
-        email: sessionUser.email,
-        avatar: sessionUser.image ?? null,
-        role: sessionUser.role ?? "user",
-      }
-    : null
+
+  // Memoizado por valores primitivos: garante referência estável entre renders
+  // sem memoização, cada render cria um objeto novo → loops infinitos em useEffect(…, [user])
+  const user = useMemo<User | null>(
+    () =>
+      sessionUser
+        ? {
+            id: sessionUser.id,
+            slug:
+              sessionUser.slug ??
+              createSlug(sessionUser.name || sessionUser.email.split("@")[0]),
+            name: sessionUser.name ?? "",
+            email: sessionUser.email,
+            avatar: sessionUser.image ?? null,
+            role: sessionUser.role ?? "user",
+          }
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      sessionUser?.id,
+      sessionUser?.slug,
+      sessionUser?.name,
+      sessionUser?.email,
+      sessionUser?.image,
+      sessionUser?.role,
+    ]
+  )
 
   const refetchSession = async () => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEY })

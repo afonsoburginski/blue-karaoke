@@ -11,6 +11,9 @@ import { toast } from "sonner"
 import { Calendar, Clock, Settings } from "lucide-react"
 import { getMusicaByCodigo, musicaAleatoria } from "@/lib/tauri"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { useAtalhos } from "@/hooks/use-atalhos"
+import { matchKey, keyFromEvent } from "@/lib/atalhos"
+import { useBannerBg } from "@/hooks/use-banner-bg"
 
 function HomePageContent() {
   const [codigo, setCodigo] = useState("")
@@ -32,6 +35,25 @@ function HomePageContent() {
   const isActivated = ativacaoStatus.ativada && !ativacaoStatus.expirada
   const isActivatedOrJustActivated = isActivated || justActivated
   const isModoMaquina = ativacaoStatus.tipo === "maquina"
+
+  const { getKey } = useAtalhos()
+  const bannerBg = useBannerBg()
+
+  // Ref sempre atualizado a cada render — evita stale closure no handler de teclado.
+  // O handler é registrado uma única vez ([] deps), mas lê sempre o estado atual.
+  const handlerStateRef = useRef({
+    isActivatedOrJustActivated: false,
+    ativacaoDialogOpen: false,
+    configDialogOpen: false,
+    codigo: "",
+    error: false,
+    isLoading: false,
+    blockDownloads: false,
+    getKey,
+    handleSubmit: null as unknown as () => Promise<void>,
+    navigate: null as unknown as ReturnType<typeof useNavigate>,
+    toggleBlockDownloads: null as unknown as () => void,
+  })
 
   const setCodigoMaquina = useCallback((v: string) => {
     setCodigo(v.replace(/\D/g, "").slice(0, 5))
@@ -181,8 +203,40 @@ function HomePageContent() {
     }
   }, [codigo, isLoading, navigate, isActivatedOrJustActivated, ativacaoStatus.modo])
 
+  // Mantém o ref sempre atualizado a cada render.
+  // O handler de teclado é registrado apenas uma vez (deps=[]) e lê daqui,
+  // eliminando o stale-closure que causava "C não funciona na primeira vez".
+  handlerStateRef.current = {
+    isActivatedOrJustActivated,
+    ativacaoDialogOpen,
+    configDialogOpen,
+    codigo,
+    error,
+    isLoading,
+    blockDownloads,
+    getKey,
+    handleSubmit,
+    navigate,
+    toggleBlockDownloads,
+  }
+
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Lê o estado atual via ref — sem stale closure
+      const {
+        isActivatedOrJustActivated,
+        ativacaoDialogOpen,
+        configDialogOpen,
+        codigo,
+        error,
+        isLoading,
+        blockDownloads,
+        getKey,
+        handleSubmit,
+        navigate,
+        toggleBlockDownloads,
+      } = handlerStateRef.current
+
       const target = e.target as HTMLElement
       const isInputElement =
         target.tagName === "INPUT" ||
@@ -192,37 +246,69 @@ function HomePageContent() {
         target.closest("textarea") ||
         target.closest("[contenteditable]")
 
-      // F12 = abrir Configurações
+      // F12 = abrir Configurações (sempre fixo, ignora foco)
       if (e.key === "F12") {
         e.preventDefault()
         setConfigDialogOpen(true)
         return
       }
 
-      // Esc = fechar app (Tauri)
-      if (e.key === "Escape" && !ativacaoDialogOpen && !configDialogOpen) {
+      // Dialogs abertos: não processa mais nada
+      if (ativacaoDialogOpen || configDialogOpen) return
+
+      // Fechar app (sempre, ignora foco do input)
+      if (matchKey(e, getKey("fechar"))) {
         e.preventDefault()
         getCurrentWindow().close()
         return
       }
 
-      // Espaço = minimizar
-      if (e.key === " " && !isInputElement && !ativacaoDialogOpen && !configDialogOpen) {
+      // Minimizar (ignora foco do input)
+      if (matchKey(e, getKey("minimizar"))) {
         e.preventDefault()
         getCurrentWindow().minimize()
         return
       }
 
-      // * ou Multiply (numpad): sincronização (só se não estiver no input)
-      if (!isInputElement && isActivatedOrJustActivated && (e.key === "*" || e.key === "Multiply" || e.code === "NumpadMultiply")) {
-        window.dispatchEvent(new CustomEvent("checkNewMusic"))
-        e.preventDefault()
-        return
+      // Atalhos globais que funcionam mesmo com o input focado (modo máquina):
+      // o input foca automaticamente, mas C/*/+/Delete devem sempre funcionar.
+      if (isActivatedOrJustActivated) {
+        if (matchKey(e, getKey("sincronizar"))) {
+          e.preventDefault()
+          window.dispatchEvent(new CustomEvent("checkNewMusic"))
+          return
+        }
+        if (matchKey(e, getKey("aleatorio"))) {
+          e.preventDefault()
+          musicaAleatoria()
+            .then((cod) => {
+              if (cod) navigate(`/tocar?c=${encodeURIComponent(cod)}`)
+              else toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
+            })
+            .catch(() => toast.error("Erro ao buscar música aleatória."))
+          return
+        }
+        if (matchKey(e, getKey("cancelar")) || e.code === "NumpadDecimal" || e.key === "Delete") {
+          e.preventDefault()
+          setCodigo("")
+          setError(false)
+          return
+        }
+        if (matchKey(e, getKey("reiniciar"))) {
+          e.preventDefault()
+          navigate("/")
+          return
+        }
+        if (matchKey(e, getKey("pausar"))) {
+          e.preventDefault()
+          toggleBlockDownloads()
+          toast.info(blockDownloads ? "Downloads retomados" : "Downloads pausados")
+          return
+        }
       }
 
-      if (ativacaoDialogOpen || configDialogOpen || isInputElement) {
-        return
-      }
+      // A partir daqui: ignorar se input está focado ou não ativado
+      if (isInputElement) return
 
       if (!isActivatedOrJustActivated) {
         if (e.key !== "Escape") e.preventDefault()
@@ -244,25 +330,6 @@ function HomePageContent() {
         setCodigo((prev) => prev.slice(0, -1))
         setError(false)
         e.preventDefault()
-      } else if (e.key === "Delete" || e.code === "NumpadDecimal") {
-        setCodigo("")
-        setError(false)
-        e.preventDefault()
-      } else if (e.key === "+") {
-        navigate("/")
-        e.preventDefault()
-      } else if (e.key === "c" || e.key === "C") {
-        e.preventDefault()
-        musicaAleatoria()
-          .then((cod) => {
-            if (cod) navigate(`/tocar?c=${encodeURIComponent(cod)}`)
-            else toast.info("Nenhuma música baixada. Pressione * para sincronizar.")
-          })
-          .catch(() => toast.error("Erro ao buscar música aleatória."))
-      } else if (e.key === "p" || e.key === "P") {
-        e.preventDefault()
-        toggleBlockDownloads()
-        toast.info(blockDownloads ? "Downloads retomados" : "Downloads pausados")
       } else {
         e.preventDefault()
       }
@@ -270,7 +337,8 @@ function HomePageContent() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [codigo, error, isLoading, handleSubmit, isActivatedOrJustActivated, ativacaoDialogOpen, configDialogOpen, navigate, toggleBlockDownloads, blockDownloads])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // handler registrado uma única vez; estado lido via handlerStateRef
 
   // Loading state
   if (ativacaoStatus.modo === "loading") {
@@ -279,7 +347,7 @@ function HomePageContent() {
         <div
           className="absolute inset-0 blur-sm scale-105"
           style={{
-            backgroundImage: `url('/images/image.png')`,
+            backgroundImage: `url('${bannerBg ?? "/images/image.png"}')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
@@ -305,7 +373,7 @@ function HomePageContent() {
       <div
         className="absolute inset-0 blur-sm scale-105"
         style={{
-          backgroundImage: `url('/images/image.png')`,
+          backgroundImage: `url('${bannerBg ?? "/images/image.png"}')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',

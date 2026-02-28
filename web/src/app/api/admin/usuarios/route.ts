@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db, users, assinaturas, account, chavesAtivacao } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
-import { eq, desc, and, inArray } from "drizzle-orm"
+import { requireAdmin, CACHE } from "@/lib/api"
 import { hashPassword } from "@/lib/auth"
+import { eq, desc, and, inArray } from "drizzle-orm"
 import { createSlug } from "@/lib/slug"
 import { createId } from "@paralleldrive/cuid2"
 
@@ -22,25 +22,10 @@ const userListColumns = {
 
 // Listar todos os usuários (apenas admin)
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin()
+  if (auth.error) return auth.error
+
   try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-
-    const [adminRow] = await db
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, currentUser.userId))
-      .limit(1)
-
-    if (!adminRow || adminRow.role !== "admin") {
-      return NextResponse.json(
-        { error: "Acesso negado. Apenas administradores." },
-        { status: 403 }
-      )
-    }
-
     const searchParams = request.nextUrl.searchParams
     const tipo = searchParams.get("tipo")
     const status = searchParams.get("status")
@@ -185,47 +170,20 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { usuarios: usersWithDetails },
-      {
-        headers: {
-          "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
-        },
-      }
+      { headers: CACHE.SHORT }
     )
   } catch (error) {
     console.error("Erro ao buscar usuários:", error)
-    return NextResponse.json(
-      { error: "Erro ao buscar usuários" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro ao buscar usuários" }, { status: 500 })
   }
 }
 
 // Criar novo usuário (apenas admin)
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin()
+  if (auth.error) return auth.error
+
   try {
-    const currentUser = await getCurrentUser()
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      )
-    }
-
-    // Buscar usuário completo para verificar role
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, currentUser.userId))
-      .limit(1)
-
-    if (!user || user.role !== "admin") {
-      return NextResponse.json(
-        { error: "Acesso negado. Apenas administradores." },
-        { status: 403 }
-      )
-    }
-
     const body = await request.json()
     const { name, email, password, userType, role } = body
 

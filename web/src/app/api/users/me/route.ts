@@ -1,62 +1,39 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { headers } from "next/headers"
 import { db, users } from "@/lib/db"
+import { requireAuth, CACHE } from "@/lib/api"
 import { eq } from "drizzle-orm"
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (auth.error) return auth.error
+  const { user } = auth
+
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    })
-
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      )
-    }
-
-    // Buscar dados completos do usuário do banco
-    const [user] = await db
+    // Busca apenas os campos extras não presentes na sessão (avatar/image)
+    const [dbUser] = await db
       .select({
-        id: users.id,
-        slug: users.slug,
-        name: users.name,
-        email: users.email,
         avatar: users.avatar,
         image: users.image,
-        role: users.role,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
       })
       .from(users)
-      .where(eq(users.id, session.user.id))
+      .where(eq(users.id, user.userId))
       .limit(1)
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Usuário não encontrado" },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        slug: user.slug,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar || user.image || null,
-        role: user.role,
+    return NextResponse.json(
+      {
+        user: {
+          id: user.userId,
+          slug: user.slug,
+          name: user.name,
+          email: user.email,
+          avatar: dbUser?.avatar || dbUser?.image || null,
+          role: user.role,
+        },
       },
-    })
+      { headers: CACHE.SHORT }
+    )
   } catch (error) {
     console.error("Erro ao buscar usuário:", error)
-    return NextResponse.json(
-      { error: "Erro ao buscar usuário" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro ao buscar usuário" }, { status: 500 })
   }
 }
-

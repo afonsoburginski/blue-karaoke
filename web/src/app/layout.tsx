@@ -36,18 +36,8 @@ export const metadata: Metadata = {
     description: 'Sistema de gerenciamento de karaokê - Blue Karaoke',
   },
   icons: {
-    icon: [
-      {
-        url: '/images/logo.png',
-        type: 'image/png',
-      },
-      {
-        url: '/images/icon.png',
-        type: 'image/png',
-      },
-    ],
-    apple: '/images/icon.png',
-    shortcut: '/images/logo.png',
+    icon: '/icon.ico',
+    apple: '/icon.ico',
   },
 }
 

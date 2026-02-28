@@ -79,11 +79,11 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 dias
     updateAge: 60 * 60 * 24, // Atualizar sessão a cada 24 horas
+    // cookieCache DESATIVADO: armazenar a sessão serializada no cookie
+    // causava cookies de 3-5 KB, ultrapassando o limite de headers do Node.js (431).
     cookieCache: {
-      enabled: true,
-      maxAge: 5 * 60, // 5 minutos
+      enabled: false,
     },
-    // Configurações de cookie para persistir entre sessões do navegador
     cookieOptions: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

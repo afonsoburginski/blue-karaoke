@@ -1,47 +1,54 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { chavesAtivacao, assinaturas, users } from "@/lib/db/schema"
+import { chavesAtivacao, assinaturas } from "@/lib/db/schema"
+import { requireAuth, CACHE } from "@/lib/api"
 import { eq, and, desc } from "drizzle-orm"
-import { getCurrentUser } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
-  try {
-    const currentUser = await getCurrentUser()
+  const auth = await requireAuth()
+  if (auth.error) return auth.error
+  const { user } = auth
 
-    if (!currentUser) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const userId = searchParams.get("userId") || user.userId
+
+    // Admin não precisa de chave — zero queries ao DB
+    if (user.role === "admin") {
       return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
+        { chave: null, dataExpiracao: null, status: "ativa", isAdmin: true },
+        { headers: CACHE.SHORT }
       )
     }
 
-    const searchParams = request.nextUrl.searchParams
-    const userId = searchParams.get("userId") || currentUser.userId
+    // Busca assinatura ativa e chaves em paralelo
+    const [subscription, chave] = await Promise.all([
+      db
+        .select({ id: assinaturas.id, status: assinaturas.status })
+        .from(assinaturas)
+        .where(eq(assinaturas.userId, userId))
+        .orderBy(desc(assinaturas.dataInicio))
+        .limit(1)
+        .then((r) => r[0] ?? null),
 
-    // Verificar role do usuário
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1)
-
-    // Se for admin, retornar sucesso sem chave (admin não precisa de chave)
-    if (user && user.role === "admin") {
-      return NextResponse.json({
-        chave: null,
-        dataExpiracao: null,
-        status: "ativa",
-        isAdmin: true,
-      })
-    }
-
-    // Verificar se o usuário tem assinatura ativa
-    const [subscription] = await db
-      .select()
-      .from(assinaturas)
-      .where(eq(assinaturas.userId, userId))
-      .orderBy(desc(assinaturas.dataInicio))
-      .limit(1)
+      db
+        .select({
+          chave: chavesAtivacao.chave,
+          dataExpiracao: chavesAtivacao.dataExpiracao,
+          status: chavesAtivacao.status,
+          machineId: chavesAtivacao.machineId,
+        })
+        .from(chavesAtivacao)
+        .where(
+          and(
+            eq(chavesAtivacao.userId, userId),
+            eq(chavesAtivacao.tipo, "assinatura")
+          )
+        )
+        .orderBy(desc(chavesAtivacao.createdAt))
+        .limit(1)
+        .then((r) => r[0] ?? null),
+    ])
 
     if (!subscription) {
       return NextResponse.json(
@@ -50,18 +57,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar chave de ativação do tipo "assinatura" para este usuário
-    const [chave] = await db
-      .select()
-      .from(chavesAtivacao)
-      .where(
-        and(
-          eq(chavesAtivacao.userId, userId),
-          eq(chavesAtivacao.tipo, "assinatura")
-        )
-      )
-      .limit(1)
-
     if (!chave) {
       return NextResponse.json(
         { error: "Chave não encontrada" },
@@ -69,20 +64,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({
-      chave: chave.chave,
-      dataExpiracao: chave.dataExpiracao,
-      status: chave.status,
-    })
+    return NextResponse.json(
+      {
+        chave: chave.chave,
+        dataExpiracao: chave.dataExpiracao,
+        status: chave.status,
+      },
+      { headers: CACHE.SHORT }
+    )
   } catch (error: any) {
     console.error("Erro ao buscar chave:", error)
     return NextResponse.json(
-      {
-        error: "Erro ao buscar chave",
-        details: error.message,
-      },
+      { error: "Erro ao buscar chave", details: error.message },
       { status: 500 }
     )
   }
 }
-

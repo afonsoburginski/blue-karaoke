@@ -88,3 +88,10 @@
 html {
   color-scheme: dark;
 }
+
+/* Quando o player nativo (mpv via Win32) está ativo, body deve ser
+   completamente transparente para que o vídeo apareça através do WebView2. */
+html[data-native-player],
+html[data-native-player] body {
+  background: transparent !important;
+}

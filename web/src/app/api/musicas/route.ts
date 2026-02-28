@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db, musicas, users } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
+import { db, musicas } from "@/lib/db"
+import { requireAuth, CACHE } from "@/lib/api"
 import { eq, desc } from "drizzle-orm"
 
 // Colunas da listagem (menor payload; índices em created_at / user_id)
@@ -18,72 +18,42 @@ const listColumns = {
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+  const auth = await requireAuth()
+  if (auth.error) return auth.error
+  const { user } = auth
 
+  try {
     const searchParams = request.nextUrl.searchParams
     const userIdParam = searchParams.get("userId")
     const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "500", 10)), 5000)
     const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10))
 
-    let allMusicas
-
-    if (userIdParam) {
-      const [user] = await db
-        .select({ role: users.role })
-        .from(users)
-        .where(eq(users.id, currentUser.userId))
-        .limit(1)
-      if (!user || user.role !== "admin") {
-        return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
-      }
-      allMusicas = await db
-        .select(listColumns)
-        .from(musicas)
-        .where(eq(musicas.userId, userIdParam))
-        .orderBy(desc(musicas.createdAt))
-        .limit(limit)
-        .offset(offset)
-    } else {
-      allMusicas = await db
-        .select(listColumns)
-        .from(musicas)
-        .orderBy(desc(musicas.createdAt))
-        .limit(limit)
-        .offset(offset)
+    // Filtrar por userId externo exige role admin
+    if (userIdParam && user.role !== "admin") {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
     }
 
-    return NextResponse.json(
-      { musicas: allMusicas },
-      {
-        headers: {
-          "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
-        },
-      }
-    )
+    const allMusicas = await db
+      .select(listColumns)
+      .from(musicas)
+      .where(userIdParam ? eq(musicas.userId, userIdParam) : undefined)
+      .orderBy(desc(musicas.createdAt))
+      .limit(limit)
+      .offset(offset)
+
+    return NextResponse.json({ musicas: allMusicas }, { headers: CACHE.MEDIUM })
   } catch (error) {
     console.error("Erro ao buscar músicas:", error)
-    return NextResponse.json(
-      { error: "Erro ao buscar músicas" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro ao buscar músicas" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (auth.error) return auth.error
+  const { user } = auth
+
   try {
-    const currentUser = await getCurrentUser()
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      )
-    }
-
     const body = await request.json()
     const { codigo, artista, titulo, arquivo, nomeArquivo, tamanho, duracao } = body
 
@@ -118,7 +88,7 @@ export async function POST(request: NextRequest) {
         nomeArquivo,
         tamanho,
         duracao,
-        userId: currentUser.userId,
+        userId: user.userId,
       })
       .returning()
 

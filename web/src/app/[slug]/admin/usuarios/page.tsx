@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Key, Clock, CalendarCheck, Copy, Check, Eye, EyeOff, KeyRound, Trash2 } from "lucide-react"
+import { Plus, Key, Clock, CalendarCheck, Copy, Check, Eye, EyeOff, KeyRound, Trash2, List, Laptop, Unlink, Pencil } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Dialog,
@@ -52,6 +52,33 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { toast } from "sonner"
+
+interface ChaveSimples {
+  id: string
+  chave: string
+  tipo: string
+  status: string
+  limiteTempo?: number | null
+  dataInicio?: string | null
+  dataExpiracao?: string | null
+  usadoEm?: string | null
+  ultimoUso?: string | null
+  machineId?: string | null
+  createdAt: string
+}
+
+function diasRestantes(chave: ChaveSimples): number | null {
+  const now = Date.now()
+  if (chave.dataExpiracao) {
+    return Math.max(0, Math.ceil((new Date(chave.dataExpiracao).getTime() - now) / 86400000))
+  }
+  if (chave.tipo === "maquina" && chave.dataInicio && chave.limiteTempo != null) {
+    const fim = new Date(chave.dataInicio).getTime() + chave.limiteTempo * 86400000
+    return Math.max(0, Math.ceil((fim - now) / 86400000))
+  }
+  if (chave.tipo === "maquina" && chave.limiteTempo != null) return chave.limiteTempo
+  return null
+}
 
 export default function AdminUsuariosPage() {
   const router = useRouter()
@@ -94,6 +121,21 @@ export default function AdminUsuariosPage() {
     dataExpiracao: "",
     limiteTempo: "",
   })
+
+  // Dialog "Ver todas as chaves" de um usuário
+  const [allKeysDialogOpen, setAllKeysDialogOpen] = useState(false)
+  const [allKeysUser, setAllKeysUser] = useState<{ id: string; name: string } | null>(null)
+  const [allKeysData, setAllKeysData] = useState<ChaveSimples[]>([])
+  const [allKeysLoading, setAllKeysLoading] = useState(false)
+  const [copiedChave, setCopiedChave] = useState<string | null>(null)
+  const [unlockingChave, setUnlockingChave] = useState<string | null>(null)
+  const [deletingChave, setDeletingChave] = useState<string | null>(null)
+  const [allKeysTipoFilter, setAllKeysTipoFilter] = useState("all")
+  const [allKeysStatusFilter, setAllKeysStatusFilter] = useState("all")
+  const [editDiasDialogOpen, setEditDiasDialogOpen] = useState(false)
+  const [editDiasChave, setEditDiasChave] = useState<ChaveSimples | null>(null)
+  const [editDiasValue, setEditDiasValue] = useState("")
+  const [editDiasSaving, setEditDiasSaving] = useState(false)
 
   const toggleKeyVisibility = (userId: string) => {
     setVisibleKeys((prev) => {
@@ -365,32 +407,126 @@ export default function AdminUsuariosPage() {
     }
   }
 
-  const openCreateKeyDialog = (userId: string) => {
+  /** Abre o dialog para CRIAR uma nova chave (nunca edita a existente). */
+  const openCreateNewKeyDialog = (userId: string) => {
+    setSelectedUserId(userId)
+    setSelectedUserChave(null)
+    setIsEditingKey(false)
+    setKeyFormData({ tipo: "assinatura", dataExpiracao: "", limiteTempo: "" })
+    setCreateKeyDialogOpen(true)
+  }
+
+  /** Abre o dialog para EDITAR a chave mais recente do usuário. */
+  const openEditKeyDialog = (userId: string) => {
     const usuario = usuarios.find(u => u.id === userId)
     const hasChave = usuario?.chaveAtivacao
-    
-    setSelectedUserId(userId)
-    setSelectedUserChave(hasChave || null)
-    setIsEditingKey(!!hasChave)
-    
-    // Preencher formulário com dados existentes se estiver editando
-    if (hasChave) {
-      setKeyFormData({
-        tipo: hasChave.tipo as "assinatura" | "maquina",
-        dataExpiracao: hasChave.dataExpiracao 
-          ? new Date(hasChave.dataExpiracao).toISOString().split("T")[0]
-          : "",
-        limiteTempo: hasChave.limiteTempo?.toString() || "",
-      })
-    } else {
-      setKeyFormData({
-        tipo: "assinatura",
-        dataExpiracao: "",
-        limiteTempo: "",
-      })
+    if (!hasChave) {
+      openCreateNewKeyDialog(userId)
+      return
     }
-    
+    setSelectedUserId(userId)
+    setSelectedUserChave(hasChave)
+    setIsEditingKey(true)
+    setKeyFormData({
+      tipo: hasChave.tipo as "assinatura" | "maquina",
+      dataExpiracao: hasChave.dataExpiracao
+        ? new Date(hasChave.dataExpiracao).toISOString().split("T")[0]
+        : "",
+      limiteTempo: hasChave.limiteTempo?.toString() || "",
+    })
     setCreateKeyDialogOpen(true)
+  }
+
+  /** Mantém retrocompatibilidade com qualquer chamada antiga. */
+  const openCreateKeyDialog = (userId: string) => openCreateNewKeyDialog(userId)
+
+  const openAllKeysDialog = async (usuario: Usuario) => {
+    setAllKeysUser({ id: usuario.id, name: usuario.name })
+    setAllKeysData([])
+    setAllKeysLoading(true)
+    setAllKeysDialogOpen(true)
+    try {
+      const res = await fetch(`/api/admin/chaves?userId=${encodeURIComponent(usuario.id)}`, {
+        cache: "no-store",
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAllKeysData(data.chaves ?? [])
+      }
+    } catch {
+      toast.error("Erro ao buscar chaves")
+    } finally {
+      setAllKeysLoading(false)
+    }
+  }
+
+  const handleUnlockMachineInDialog = async (chaveId: string) => {
+    if (!confirm("Desbloquear máquina? A chave poderá ser ativada em outro dispositivo.")) return
+    setUnlockingChave(chaveId)
+    try {
+      const res = await fetch("/api/admin/chaves", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: chaveId, action: "unlock_machine" }),
+      })
+      if (!res.ok) { toast.error("Erro ao desbloquear"); return }
+      setAllKeysData(prev => prev.map(c => c.id === chaveId ? { ...c, machineId: null } : c))
+      toast.success("Máquina desbloqueada")
+    } catch { toast.error("Erro ao desbloquear") }
+    finally { setUnlockingChave(null) }
+  }
+
+  const handleDeleteChaveInDialog = async (chaveId: string) => {
+    if (!confirm("Deletar esta chave? Quem a estiver usando perderá o acesso.")) return
+    setDeletingChave(chaveId)
+    try {
+      const res = await fetch(`/api/admin/chaves?id=${encodeURIComponent(chaveId)}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Erro ao deletar chave"); return }
+      setAllKeysData(prev => prev.filter(c => c.id !== chaveId))
+      toast.success("Chave deletada")
+    } catch { toast.error("Erro ao deletar chave") }
+    finally { setDeletingChave(null) }
+  }
+
+  const copyChave = async (text: string, id: string) => {
+    await navigator.clipboard.writeText(text)
+    setCopiedChave(id)
+    setTimeout(() => setCopiedChave(null), 2000)
+  }
+
+  const openEditDiasInDialog = (chave: ChaveSimples) => {
+    const dias = diasRestantes(chave)
+    setEditDiasChave(chave)
+    setEditDiasValue(dias != null ? String(dias) : "")
+    setEditDiasDialogOpen(true)
+  }
+
+  const handleSaveDiasInDialog = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editDiasChave) return
+    const dias = parseInt(editDiasValue, 10)
+    if (isNaN(dias) || dias < 0) { toast.error("Informe um número de dias válido (≥ 0)"); return }
+    setEditDiasSaving(true)
+    try {
+      const res = await fetch("/api/admin/chaves", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editDiasChave.id, diasRestantes: dias }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || "Erro ao salvar"); return }
+      setAllKeysData(prev =>
+        prev.map(c =>
+          c.id === editDiasChave.id
+            ? { ...c, dataExpiracao: data.chave?.dataExpiracao ?? c.dataExpiracao, status: dias > 0 ? "ativa" : "expirada" }
+            : c
+        )
+      )
+      setEditDiasDialogOpen(false)
+      setEditDiasChave(null)
+      toast.success("Dias atualizados")
+    } catch { toast.error("Erro ao salvar") }
+    finally { setEditDiasSaving(false) }
   }
 
   const openDeleteDialog = (usuario: Usuario) => {
@@ -584,7 +720,214 @@ export default function AdminUsuariosPage() {
                 </Dialog>
               </div>
             </CardHeader>
-            {/* Dialog para criar chave de ativação */}
+            {/* ── Dialog: Todas as chaves do usuário ─────────────────────────── */}
+            <Dialog open={allKeysDialogOpen} onOpenChange={setAllKeysDialogOpen}>
+              <DialogContent className="w-[95vw] min-w-[900px] max-w-7xl h-[80vh] min-h-[400px] flex flex-col p-0 gap-0">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b shrink-0">
+                  <div>
+                    <DialogTitle className="flex items-center gap-2 text-base">
+                      <Key className="h-4 w-4" />
+                      Chaves de {allKeysUser?.name ?? "Usuário"}
+                    </DialogTitle>
+                    <DialogDescription className="mt-0.5 text-xs">
+                      Todas as chaves de ativação vinculadas a este usuário
+                    </DialogDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select value={allKeysTipoFilter} onValueChange={setAllKeysTipoFilter}>
+                      <SelectTrigger className="h-8 w-[130px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os tipos</SelectItem>
+                        <SelectItem value="assinatura">Assinatura</SelectItem>
+                        <SelectItem value="maquina">Máquina</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={allKeysStatusFilter} onValueChange={setAllKeysStatusFilter}>
+                      <SelectTrigger className="h-8 w-[120px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="ativa">Ativas</SelectItem>
+                        <SelectItem value="expirada">Expiradas</SelectItem>
+                        <SelectItem value="revogada">Revogadas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        setAllKeysDialogOpen(false)
+                        if (allKeysUser) openCreateNewKeyDialog(allKeysUser.id)
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Nova Chave
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Sub-dialog: editar dias */}
+                <Dialog open={editDiasDialogOpen} onOpenChange={setEditDiasDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Editar dias restantes</DialogTitle>
+                      <DialogDescription>
+                        Defina quantos dias restam. A data de expiração será atualizada.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSaveDiasInDialog} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="editDiasDialog">Dias restantes</Label>
+                        <Input
+                          id="editDiasDialog"
+                          type="number"
+                          min={0}
+                          value={editDiasValue}
+                          onChange={(e) => setEditDiasValue(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button type="button" variant="outline" onClick={() => { setEditDiasDialogOpen(false); setEditDiasChave(null) }}>
+                          Cancelar
+                        </Button>
+                        <Button type="submit" disabled={editDiasSaving}>
+                          {editDiasSaving ? "Salvando…" : "Salvar"}
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Corpo: tabela */}
+                <div className="flex-1 overflow-auto">
+                  {allKeysLoading ? (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      Carregando…
+                    </div>
+                  ) : (() => {
+                    const filtered = allKeysData.filter(c =>
+                      (allKeysTipoFilter === "all" || c.tipo === allKeysTipoFilter) &&
+                      (allKeysStatusFilter === "all" || c.status === allKeysStatusFilter)
+                    )
+                    return filtered.length === 0 ? (
+                      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                        Nenhuma chave encontrada.
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Chave</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Limite / Expiração</TableHead>
+                            <TableHead>Máquina</TableHead>
+                            <TableHead>Último Uso</TableHead>
+                            <TableHead>Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filtered.map((chave) => {
+                            const dias = diasRestantes(chave)
+                            return (
+                              <TableRow key={chave.id}>
+                                <TableCell className="font-mono text-sm">{chave.chave}</TableCell>
+                                <TableCell>
+                                  <Badge variant={chave.tipo === "maquina" ? "secondary" : "default"}>
+                                    {chave.tipo === "maquina" ? "Máquina" : "Assinatura"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={chave.status === "ativa" ? "default" : chave.status === "expirada" ? "destructive" : "secondary"}>
+                                    {chave.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {chave.tipo === "maquina" ? (
+                                    dias != null ? `${dias} dias` : chave.limiteTempo != null ? `${chave.limiteTempo} dias (não usada)` : "-"
+                                  ) : chave.dataExpiracao ? (
+                                    <>
+                                      {new Date(chave.dataExpiracao).toLocaleDateString("pt-BR")}
+                                      {dias != null && <span className="text-muted-foreground ml-1">({dias} dias)</span>}
+                                    </>
+                                  ) : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {chave.machineId ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <Laptop className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                      <span className="font-mono text-xs text-muted-foreground truncate max-w-[80px]" title={chave.machineId}>
+                                        {chave.machineId.slice(0, 8)}…
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Livre</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {chave.ultimoUso
+                                    ? new Date(chave.ultimoUso).toLocaleDateString("pt-BR")
+                                    : chave.usadoEm
+                                    ? new Date(chave.usadoEm).toLocaleDateString("pt-BR")
+                                    : "Nunca"}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    <Button variant="ghost" size="sm" onClick={() => copyChave(chave.chave, chave.id)} title="Copiar chave">
+                                      {copiedChave === chave.id ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => openEditDiasInDialog(chave)} title="Editar dias restantes">
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    {chave.machineId && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-orange-500 hover:text-orange-600"
+                                        onClick={() => handleUnlockMachineInDialog(chave.id)}
+                                        disabled={unlockingChave === chave.id}
+                                        title="Desbloquear máquina"
+                                      >
+                                        <Unlink className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => handleDeleteChaveInDialog(chave.id)}
+                                      disabled={deletingChave === chave.id}
+                                      title="Deletar chave"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    )
+                  })()}
+                </div>
+
+                {/* Rodapé */}
+                <div className="px-6 py-3 border-t shrink-0 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {allKeysData.filter(c =>
+                      (allKeysTipoFilter === "all" || c.tipo === allKeysTipoFilter) &&
+                      (allKeysStatusFilter === "all" || c.status === allKeysStatusFilter)
+                    ).length} de {allKeysData.length} chave{allKeysData.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             {/* Dialog de Confirmação de Deleção */}
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
               <DialogContent>
@@ -635,12 +978,13 @@ export default function AdminUsuariosPage() {
             }}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{isEditingKey ? "Editar Chave de Ativação" : "Criar Chave de Ativação"}</DialogTitle>
+                  <DialogTitle>
+                    {isEditingKey ? "Editar Chave de Ativação" : "Nova Chave de Ativação"}
+                  </DialogTitle>
                   <DialogDescription>
                     {isEditingKey
-                      ? "Altere o tipo (assinatura/máquina), data de expiração ou limite em dias da chave existente."
-                      : "Crie uma chave de ativação manualmente para o usuário selecionado."
-                    }
+                      ? "Altere a data de expiração ou limite em dias da chave existente."
+                      : "Crie uma nova chave vinculada a este usuário. Chaves de máquina standalone (sem usuário) devem ser criadas na página Chaves."}
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateKey} className="space-y-4">
@@ -656,13 +1000,10 @@ export default function AdminUsuariosPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="assinatura">Assinatura</SelectItem>
-                        <SelectItem value="maquina">Máquina</SelectItem>
+                        <SelectItem value="assinatura">Assinatura (data de expiração)</SelectItem>
+                        <SelectItem value="maquina">Máquina (limite em dias)</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Assinatura usa data de expiração; máquina usa limite em dias.
-                    </p>
                   </div>
 
                   {keyFormData.tipo === "assinatura" ? (
@@ -871,12 +1212,31 @@ export default function AdminUsuariosPage() {
                         <ContextMenuContent>
                           <ContextMenuLabel>{usuario.name}</ContextMenuLabel>
                           <ContextMenuSeparator />
+                          {/* Sempre disponível: cria mais uma chave nova */}
                           <ContextMenuItem
-                            onClick={() => openCreateKeyDialog(usuario.id)}
+                            onClick={() => openCreateNewKeyDialog(usuario.id)}
                             className="cursor-pointer"
                           >
-                            <KeyRound className="h-4 w-4 mr-2" />
-                            {usuario.chaveAtivacao ? "Editar Chave de Ativação" : "Criar Chave de Ativação"}
+                            <Plus className="h-4 w-4 mr-2" />
+                            Nova Chave de Ativação
+                          </ContextMenuItem>
+                          {/* Editar a chave mais recente (só mostra se tiver alguma) */}
+                          {usuario.chaveAtivacao && (
+                            <ContextMenuItem
+                              onClick={() => openEditKeyDialog(usuario.id)}
+                              className="cursor-pointer"
+                            >
+                              <KeyRound className="h-4 w-4 mr-2" />
+                              Editar Última Chave
+                            </ContextMenuItem>
+                          )}
+                          {/* Dialog com todas as chaves do usuário */}
+                          <ContextMenuItem
+                            onClick={() => openAllKeysDialog(usuario)}
+                            className="cursor-pointer"
+                          >
+                            <List className="h-4 w-4 mr-2" />
+                            Ver Todas as Chaves
                           </ContextMenuItem>
                           <ContextMenuSeparator />
                           <ContextMenuItem

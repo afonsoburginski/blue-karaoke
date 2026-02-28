@@ -14,6 +14,13 @@ pub fn init_db(data_dir: &str) -> Result<(), String> {
         PRAGMA journal_mode=WAL;
         PRAGMA foreign_keys=ON;
 
+        -- Configurações persistentes da máquina (machine_id, etc.)
+        CREATE TABLE IF NOT EXISTS config_local (
+            chave TEXT PRIMARY KEY,
+            valor TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS musicas_local (
             id TEXT PRIMARY KEY,
             codigo TEXT NOT NULL UNIQUE,
@@ -302,6 +309,39 @@ pub fn remover_ativacao_db() -> Result<(), String> {
     with_db(|conn| {
         conn.execute("DELETE FROM ativacao_local WHERE id = '1'", [])?;
         Ok(())
+    })
+}
+
+/// Retorna o machine_id desta máquina.
+/// Na primeira chamada, gera um UUID v4 aleatório e persiste no SQLite.
+/// Nas chamadas subsequentes, retorna o valor armazenado.
+pub fn get_or_create_machine_id() -> Result<String, String> {
+    with_db(|conn| {
+        // Tenta buscar machine_id existente
+        let existing: Option<String> = {
+            let mut stmt = conn.prepare(
+                "SELECT valor FROM config_local WHERE chave = 'machine_id'"
+            )?;
+            let mut rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            match rows.next() {
+                Some(r) => Some(r?),
+                None => None,
+            }
+        };
+
+        if let Some(id) = existing {
+            return Ok(id);
+        }
+
+        // Gera novo machine_id
+        let new_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().timestamp_millis();
+        conn.execute(
+            "INSERT INTO config_local (chave, valor, updated_at) VALUES ('machine_id', ?1, ?2)",
+            params![new_id, now],
+        )?;
+        log::info!("[DB] Novo machine_id gerado: {}", new_id);
+        Ok(new_id)
     })
 }
 

@@ -119,7 +119,7 @@ export const assinaturas = pgTable("assinaturas", {
 export const chavesAtivacao = pgTable("chaves_ativacao", {
   id: uuid("id").primaryKey().defaultRandom(),
   chave: text("chave").notNull().unique(), // Chave única de ativação
-  userId: text("user_id").references(() => users.id), // Usuário associado (se for assinante)
+  userId: text("user_id").references(() => users.id), // Usuário associado (pode ter múltiplas chaves)
   tipo: tipoChaveEnum("tipo").notNull().default("maquina"), // 'assinatura' ou 'maquina'
   status: text("status").notNull().default("ativa"), // 'ativa', 'expirada', 'revogada'
   limiteTempo: integer("limite_tempo"), // Limite em DIAS (para máquinas)
@@ -128,6 +128,10 @@ export const chavesAtivacao = pgTable("chaves_ativacao", {
   criadoPor: text("criado_por").references(() => users.id).notNull(), // Admin que criou
   usadoEm: timestamp("usado_em"), // Quando foi usado pela primeira vez
   ultimoUso: timestamp("ultimo_uso"), // Última vez que foi usada
+  // machine_id: identificador único da máquina que ativou a chave.
+  // Null = chave ainda não foi ativada em nenhuma máquina.
+  // Preenchido na primeira validação — impede reuso em outra máquina.
+  machineId: text("machine_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })

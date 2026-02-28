@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { navigateFast } from "@/lib/navigation"
 import {
@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Copy, CheckCircle2, Trash2, Pencil } from "lucide-react"
+import { Plus, Copy, CheckCircle2, Trash2, Pencil, Laptop, Unlink } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Dialog,
@@ -51,6 +51,8 @@ interface Chave {
   dataExpiracao?: string | null
   usadoEm?: string | null
   ultimoUso?: string | null
+  /** ID da máquina onde a chave está vinculada. Null = nenhuma máquina ainda. */
+  machineId?: string | null
   createdAt: string
   user?: {
     id: string
@@ -62,12 +64,15 @@ interface Chave {
 export default function AdminChavesPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const { user, isLoading: authLoading, isRoleLoading } = useAuth()
   const [slug, setSlug] = useState<string | null>(null)
   const [chaves, setChaves] = useState<Chave[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [tipoFilter, setTipoFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  // Filtro opcional por userId (vindo da URL via ?userId=)
+  const userIdFilter = searchParams.get("userId") ?? null
   const [dialogOpen, setDialogOpen] = useState(false)
   const [novaChave, setNovaChave] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -82,6 +87,7 @@ export default function AdminChavesPage() {
   const [editDiasValue, setEditDiasValue] = useState("")
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [isPatching, setIsPatching] = useState(false)
+  const [isUnlocking, setIsUnlocking] = useState<string | null>(null)
 
   useEffect(() => {
     async function unwrapParams() {
@@ -107,17 +113,18 @@ export default function AdminChavesPage() {
     if (user && slug) {
       fetchChaves()
     }
-  }, [user, slug, authLoading, isRoleLoading, router, tipoFilter, statusFilter])
+  }, [user, slug, authLoading, isRoleLoading, router, tipoFilter, statusFilter, userIdFilter])
 
   const fetchChaves = async (bustCache = false) => {
     try {
       setIsLoading(true)
-      const params = new URLSearchParams()
-      if (tipoFilter !== "all") params.append("tipo", tipoFilter)
-      if (statusFilter !== "all") params.append("status", statusFilter)
-      if (bustCache) params.append("_t", String(Date.now()))
+      const qs = new URLSearchParams()
+      if (tipoFilter !== "all") qs.append("tipo", tipoFilter)
+      if (statusFilter !== "all") qs.append("status", statusFilter)
+      if (userIdFilter) qs.append("userId", userIdFilter)
+      if (bustCache) qs.append("_t", String(Date.now()))
 
-      const response = await fetch(`/api/admin/chaves?${params.toString()}`, {
+      const response = await fetch(`/api/admin/chaves?${qs.toString()}`, {
         cache: "no-store",
       })
       if (response.ok) {
@@ -233,6 +240,28 @@ export default function AdminChavesPage() {
     setEditDiasOpen(true)
   }
 
+  const handleUnlockMachine = async (id: string) => {
+    if (!confirm("Desbloquear esta chave? Ela poderá ser ativada em outro dispositivo.")) return
+    setIsUnlocking(id)
+    try {
+      const res = await fetch("/api/admin/chaves", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "unlock_machine" }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || "Erro ao desbloquear")
+        return
+      }
+      setChaves((prev) => prev.map((c) => c.id === id ? { ...c, machineId: null } : c))
+    } catch {
+      alert("Erro ao desbloquear")
+    } finally {
+      setIsUnlocking(null)
+    }
+  }
+
   const handleSaveDias = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editChave) return
@@ -311,6 +340,22 @@ export default function AdminChavesPage() {
           <ThemeToggle />
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-6">
+          {/* Banner quando filtrando por usuário específico */}
+          {userIdFilter && (
+            <Card className="border-blue-500/40 bg-blue-50/50 dark:bg-blue-950/20">
+              <CardContent className="py-3 flex items-center justify-between">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Mostrando chaves do usuário <code className="font-mono text-xs bg-blue-100 dark:bg-blue-900 px-1.5 py-0.5 rounded">{userIdFilter.slice(0, 8)}…</code>
+                </p>
+                <a
+                  href={slug ? `/${slug}/admin/chaves` : `/admin/chaves`}
+                  className="text-xs text-blue-600 dark:text-blue-400 underline hover:no-underline"
+                >
+                  Ver todas as chaves
+                </a>
+              </CardContent>
+            </Card>
+          )}
           {novaChave && (
             <Card className="border-green-500 bg-green-50 dark:bg-green-950">
               <CardContent className="pt-6">
@@ -381,7 +426,8 @@ export default function AdminChavesPage() {
                     <DialogHeader>
                       <DialogTitle>Criar Nova Chave de Ativação</DialogTitle>
                       <DialogDescription>
-                        Crie uma chave para assinante ou máquina física
+                        <strong>Máquina</strong>: chave standalone, sem usuário (ideal para karaokês físicos).
+                        {" "}<strong>Assinatura</strong>: vincula a um usuário cadastrado.
                       </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleCreateChave} className="space-y-4">
@@ -520,6 +566,7 @@ export default function AdminChavesPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Limite/Expiração</TableHead>
                     <TableHead>Usuário</TableHead>
+                    <TableHead>Máquina</TableHead>
                     <TableHead>Último Uso</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
@@ -592,11 +639,25 @@ export default function AdminChavesPage() {
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
+                        {/* Máquina vinculada */}
+                        <TableCell>
+                          {chave.machineId ? (
+                            <div className="flex items-center gap-1.5">
+                              <Laptop className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                              <span
+                                className="font-mono text-xs text-muted-foreground truncate max-w-[80px]"
+                                title={chave.machineId}
+                              >
+                                {chave.machineId.slice(0, 8)}…
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Livre</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {chave.ultimoUso
-                            ? new Date(chave.ultimoUso).toLocaleDateString(
-                                "pt-BR"
-                              )
+                            ? new Date(chave.ultimoUso).toLocaleDateString("pt-BR")
                             : chave.usadoEm
                             ? new Date(chave.usadoEm).toLocaleDateString("pt-BR")
                             : "Nunca"}
@@ -618,6 +679,18 @@ export default function AdminChavesPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          {chave.machineId && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUnlockMachine(chave.id)}
+                              disabled={isUnlocking === chave.id}
+                              title="Desbloquear máquina (permite usar em outro dispositivo)"
+                              className="text-orange-500 hover:text-orange-600"
+                            >
+                              <Unlink className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -633,7 +706,7 @@ export default function AdminChavesPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center">
+                      <TableCell colSpan={8} className="text-center">
                         Nenhuma chave encontrada
                       </TableCell>
                     </TableRow>
