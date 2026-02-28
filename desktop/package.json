@@ -1,6 +1,6 @@
 {
   "name": "blue-karaoke",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Sistema de Karaoke Blue Karaoke - Desktop Tauri",
   "private": true,
   "scripts": {
