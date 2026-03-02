@@ -407,7 +407,6 @@ function HomePageContent() {
         </div>
       </div>
 
-      {/* Status de Ativação no canto superior direito */}
       {isActivatedOrJustActivated && (
         <div className="absolute top-8 right-8 z-20 px-4">
           <div className="flex items-center gap-2 whitespace-nowrap text-white">
