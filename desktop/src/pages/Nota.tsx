@@ -16,6 +16,17 @@ export default function NotaPage() {
   const [countdown, setCountdown] = useState(10)
   const [celebrationData, setCelebrationData] = useState<object | null>(null)
 
+  // Tocar som ao entrar na página
+  useEffect(() => {
+    const audio = new Audio("/song.mp3")
+    audio.volume = 0.8
+    audio.play().catch(() => {})
+    return () => {
+      audio.pause()
+      audio.src = ""
+    }
+  }, [])
+
   // Carregar animação Lottie
   useEffect(() => {
     fetch("/celebrations.json")
