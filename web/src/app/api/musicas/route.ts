@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { db, musicas } from "@/lib/db"
 import { requireAuth, CACHE } from "@/lib/api"
 import { eq, desc } from "drizzle-orm"
@@ -17,6 +18,22 @@ const listColumns = {
   updatedAt: musicas.updatedAt,
 }
 
+function getCachedMusicas(userId: string | null, limit: number, offset: number) {
+  const key = `musicas:${userId ?? "all"}:${limit}:${offset}`
+  return unstable_cache(
+    () =>
+      db
+        .select(listColumns)
+        .from(musicas)
+        .where(userId ? eq(musicas.userId, userId) : undefined)
+        .orderBy(desc(musicas.createdAt))
+        .limit(limit)
+        .offset(offset),
+    [key],
+    { revalidate: 30, tags: ["musicas"] }
+  )()
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth()
   if (auth.error) return auth.error
@@ -28,18 +45,11 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "500", 10)), 5000)
     const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10))
 
-    // Filtrar por userId externo exige role admin
     if (userIdParam && user.role !== "admin") {
       return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
     }
 
-    const allMusicas = await db
-      .select(listColumns)
-      .from(musicas)
-      .where(userIdParam ? eq(musicas.userId, userIdParam) : undefined)
-      .orderBy(desc(musicas.createdAt))
-      .limit(limit)
-      .offset(offset)
+    const allMusicas = await getCachedMusicas(userIdParam, limit, offset)
 
     return NextResponse.json({ musicas: allMusicas }, { headers: CACHE.MEDIUM })
   } catch (error) {

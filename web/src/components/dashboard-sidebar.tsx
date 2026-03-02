@@ -1,8 +1,9 @@
 "use client"
 
+import React from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { invalidateSessionQuery } from "@/hooks/use-auth"
 import {
   Sidebar,
@@ -76,8 +77,21 @@ export function DashboardSidebar({
   const { user } = useAuth()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true)
-  const [releases, setReleases] = useState<ReleaseAssets[]>([])
-  const [isLoadingReleases, setIsLoadingReleases] = useState(true)
+  // React Query deduplica a chamada: só 1 request por sessão independente de quantos componentes montam
+  const { data: releasesData, isLoading: isLoadingReleases } = useQuery<ReleaseAssets[]>({
+    queryKey: ["latest-release"],
+    queryFn: async () => {
+      const res = await fetch("/api/latest-release")
+      if (!res.ok) return []
+      const data = await res.json()
+      return data.releases ?? []
+    },
+    staleTime: 1000 * 60 * 5, // 5 min — segue o revalidate do servidor
+    gcTime: 1000 * 60 * 60,   // mantém em cache por 1h
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+  const releases = releasesData ?? []
 
   useEffect(() => {
     if (userRole === "user" && user?.id) {
@@ -131,27 +145,6 @@ export function DashboardSidebar({
     }
   }, [userRole, user?.id])
 
-  // Buscar releases para download (apenas para users com assinatura)
-  useEffect(() => {
-    if (userRole === "user") {
-      const fetchReleases = async () => {
-        try {
-          const res = await fetch("/api/latest-release")
-          if (res.ok) {
-            const data = await res.json()
-            setReleases(data.releases ?? [])
-          }
-        } catch (error) {
-          console.error("Erro ao buscar releases:", error)
-        } finally {
-          setIsLoadingReleases(false)
-        }
-      }
-      fetchReleases()
-    } else {
-      setIsLoadingReleases(false)
-    }
-  }, [userRole])
 
   const calculateDaysRemaining = (dataFim: string): number => {
     const endDate = new Date(dataFim)
@@ -199,16 +192,15 @@ export function DashboardSidebar({
     return "U"
   }
 
-  const makeItem = <T extends { url: string }>(item: T) => {
-    const dashboardUrl = slug ? `/${slug}` : "/"
-    const isDashboard = item.url === dashboardUrl
-    return {
-      ...item,
-      isActive: isDashboard
-        ? pathname === item.url
-        : (pathname?.startsWith(item.url) ?? false),
-    }
-  }
+  type NavItem = { title: string; icon: React.ElementType; url: string }
+  const makeItem = (item: NavItem) => ({
+    ...item,
+    isActive: (() => {
+      const dashboardUrl = slug ? `/${slug}` : "/"
+      const isDashboard = item.url === dashboardUrl
+      return isDashboard ? pathname === item.url : (pathname?.startsWith(item.url) ?? false)
+    })(),
+  })
 
   // Itens de navegação principal (visíveis para todos)
   const mainItems = [
@@ -356,56 +348,53 @@ export function DashboardSidebar({
           </SidebarGroup>
         )}
 
-        {/* Card de Downloads - Apenas para usuários com role "user" */}
-        {userRole === "user" && !isLoadingReleases && releases.length > 0 && (
+        {/* Card de Downloads */}
+        {!isLoadingReleases && releases.length > 0 && (
           <SidebarGroup className="mt-2">
             <SidebarGroupContent>
-              <Card className="border-sidebar-border bg-sidebar-accent/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Download className="h-4 w-4" />
-                    Baixar App
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {releases.map((release, index) => (
-                    <div key={release.version} className={index > 0 ? "border-t border-sidebar-border pt-3" : ""}>
-                      <p className="text-xs font-semibold text-foreground mb-2">
-                        v{release.version}
-                        {index === 0 && (
-                          <span className="ml-2 text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                            Mais recente
-                          </span>
-                        )}
-                      </p>
-                      <div className="flex flex-col gap-1.5">
-                        {release.windowsUrl && (
-                          <a
-                            href={release.windowsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-sidebar-accent"
-                          >
-                            <Monitor className="h-3.5 w-3.5 flex-shrink-0" />
-                            <span>Windows (.exe)</span>
-                          </a>
-                        )}
-                        {release.linuxUrl && (
-                          <a
-                            href={release.linuxUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-sidebar-accent"
-                          >
-                            <Globe className="h-3.5 w-3.5 flex-shrink-0" />
-                            <span>Linux (.deb)</span>
-                          </a>
-                        )}
+              <div className="rounded-xl border border-sidebar-border bg-gradient-to-b from-sidebar-accent/60 to-sidebar-accent/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-foreground">Blue Karaokê Desktop</p>
+                  <span className="text-[10px] font-medium bg-primary/15 text-primary px-1.5 py-0.5 rounded-full">
+                    v{releases[0].version}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Baixe o app e comece a cantar agora mesmo!
+                </p>
+                <div className="flex flex-col gap-2">
+                  {releases[0].windowsUrl && (
+                    <a
+                      href={releases[0].windowsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/20 px-3 py-2 transition-colors group"
+                    >
+                      <Monitor className="h-4 w-4 text-primary flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">Windows</p>
+                        <p className="text-[10px] text-muted-foreground">Instalador .exe</p>
                       </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                      <Download className="h-3 w-3 text-muted-foreground ml-auto flex-shrink-0" />
+                    </a>
+                  )}
+                  {releases[0].linuxUrl && (
+                    <a
+                      href={releases[0].linuxUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg bg-sidebar-accent hover:bg-sidebar-accent/80 border border-sidebar-border px-3 py-2 transition-colors group"
+                    >
+                      <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-foreground">Linux</p>
+                        <p className="text-[10px] text-muted-foreground">Pacote .deb</p>
+                      </div>
+                      <Download className="h-3 w-3 text-muted-foreground ml-auto flex-shrink-0" />
+                    </a>
+                  )}
+                </div>
+              </div>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

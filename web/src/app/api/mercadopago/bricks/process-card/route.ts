@@ -90,17 +90,6 @@ export async function POST(request: NextRequest) {
       token_preview: formData.token?.substring(0, 20) + "...",
     })
 
-    // Log detalhado em caso de rejeição em modo teste
-    if (accessToken.startsWith("TEST") && response.status === "rejected") {
-      console.error("❌ Pagamento REJEITADO em modo TESTE:", {
-        status_detail: response.status_detail,
-        causa: "Verifique se está usando cartão de teste válido e nome 'APRO'",
-        cartoes_teste: [
-          "Mastercard: 5031 4332 1540 6351",
-          "Visa: 4235 6477 2802 5682",
-        ],
-      })
-    }
 
     if (response.status === "approved" || response.status === "pending" || response.status === "in_process") {
       try {

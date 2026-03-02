@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { db, users, assinaturas, account, chavesAtivacao } from "@/lib/db"
 import { requireAdmin, CACHE } from "@/lib/api"
 import { hashPassword } from "@/lib/auth"
@@ -20,6 +21,18 @@ const userListColumns = {
   updatedAt: users.updatedAt,
 }
 
+async function fetchUsuarios(tipo: string | null, status: string | null) {
+  const conditions = []
+  if (tipo && tipo !== "all") conditions.push(eq(users.userType, tipo))
+  if (status && status !== "all") conditions.push(eq(users.isActive, status === "active"))
+
+  let usersQuery = db.select(userListColumns).from(users)
+  if (conditions.length > 0) {
+    usersQuery = usersQuery.where(and(...conditions)) as typeof usersQuery
+  }
+  return usersQuery.orderBy(desc(users.createdAt))
+}
+
 // Listar todos os usuários (apenas admin)
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin()
@@ -30,15 +43,12 @@ export async function GET(request: NextRequest) {
     const tipo = searchParams.get("tipo")
     const status = searchParams.get("status")
 
-    const conditions = []
-    if (tipo && tipo !== "all") conditions.push(eq(users.userType, tipo))
-    if (status && status !== "all") conditions.push(eq(users.isActive, status === "active"))
-
-    let usersQuery = db.select(userListColumns).from(users)
-    if (conditions.length > 0) {
-      usersQuery = usersQuery.where(and(...conditions)) as typeof usersQuery
-    }
-    const allUsersData = await usersQuery.orderBy(desc(users.createdAt))
+    const cacheKey = `usuarios:${tipo ?? "all"}:${status ?? "all"}`
+    const allUsersData = await unstable_cache(
+      () => fetchUsuarios(tipo, status),
+      [cacheKey],
+      { revalidate: 30, tags: ["usuarios"] }
+    )()
 
     const userIds = allUsersData.map((u) => u.id)
 

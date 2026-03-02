@@ -371,7 +371,7 @@ function HomePageContent() {
   return (
     <main className="min-h-screen relative overflow-hidden bg-black">
       <div
-        className="absolute inset-0 blur-sm scale-105"
+        className="absolute inset-0"
         style={{
           backgroundImage: `url('${bannerBg ?? "/images/image.png"}')`,
           backgroundSize: 'cover',
@@ -379,7 +379,6 @@ function HomePageContent() {
           backgroundRepeat: 'no-repeat',
         }}
       />
-      <div className="absolute inset-0 bg-black/30 pointer-events-none" />
       <Spotlight />
 
       {/* Logo no canto superior esquerdo */}

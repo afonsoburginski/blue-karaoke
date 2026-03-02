@@ -403,14 +403,14 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
     <div
       ref={containerRef}
       tabIndex={0}
-      className={`fixed inset-0 z-0 w-screen h-screen overflow-hidden outline-none transition-all duration-700 ${
+      className={`fixed inset-0 z-0 min-w-full min-h-full overflow-hidden outline-none transition-all duration-700 ${
         // Transparente quando usando mpv (vídeo aparece através do WebView2)
         // Preto quando usando <video> HTML5 fallback
         useNativePlayer ? "" : "bg-black"
       } ${
         isExiting && !transitionToNextSong ? "opacity-0 scale-105" : "opacity-100 scale-100"
       }`}
-      style={{ maxWidth: "100vw", maxHeight: "100dvh" }}
+      style={{ width: "100vw", height: "100dvh", left: 0, top: 0, right: 0, bottom: 0 }}
     >
       {/* Logo no canto superior esquerdo (oculto no modo máquina) */}
       {!isModoMaquina && (
@@ -538,7 +538,8 @@ export default function VideoPlayer({ musica }: { musica: MusicaSimple }) {
         <video
           ref={videoRef}
           tabIndex={-1}
-          className="absolute inset-0 w-full h-full bg-black object-contain"
+          className="absolute inset-0 w-full h-full bg-black"
+          style={{ objectFit: "fill" }}
           src={videoSrc}
           autoPlay
           muted={false}

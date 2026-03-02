@@ -42,7 +42,7 @@ function parseRelease(data: {
 
 export async function GET() {
   try {
-    const res = await fetch(`${GITHUB_API}?per_page=2`, {
+    const res = await fetch(`${GITHUB_API}?per_page=1`, {
       next: { revalidate: 300 },
       headers: {
         Accept: "application/vnd.github+json",

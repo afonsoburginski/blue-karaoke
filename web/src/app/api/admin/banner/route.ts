@@ -25,50 +25,23 @@ export async function GET() {
   }
 }
 
-/** POST /api/admin/banner (multipart/form-data com campo "file") → faz upload e atualiza URL */
+/** POST /api/admin/banner { path } → confirma upload direto e atualiza URL no banco */
 export async function POST(req: NextRequest) {
   try {
     const supabase = getSupabaseServer()
 
-    const formData = await req.formData()
-    const file = formData.get("file") as File | null
-    if (!file) {
-      return NextResponse.json({ error: "Arquivo não enviado" }, { status: 400 })
+    const { path } = await req.json() as { path?: string }
+    if (!path) {
+      return NextResponse.json({ error: "path é obrigatório" }, { status: 400 })
     }
 
-    const allowed = ["image/jpeg", "image/png", "image/webp"]
-    if (!allowed.includes(file.type)) {
-      return NextResponse.json(
-        { error: "Formato inválido. Use JPEG, PNG ou WebP." },
-        { status: 400 }
-      )
-    }
-
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-
-    // Upload com upsert (sobrescreve o arquivo anterior no mesmo caminho)
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(BANNER_PATH, buffer, {
-        contentType: file.type,
-        upsert: true,
-        cacheControl: "3600",
-      })
-
-    if (uploadError) {
-      console.error("[banner POST] upload error:", uploadError)
-      return NextResponse.json({ error: uploadError.message }, { status: 500 })
-    }
-
-    // Obtém a URL pública
-    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(BANNER_PATH)
+    // Obtém a URL pública do caminho informado pelo cliente
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
     const publicUrl = urlData.publicUrl
 
-    // Grava um timestamp no URL para forçar re-download quando atualizado
+    // Timestamp no URL para forçar re-download pelo app desktop
     const urlWithTs = `${publicUrl}?v=${Date.now()}`
 
-    // Atualiza a tabela configuracoes
     const { error: dbError } = await supabase
       .from("configuracoes")
       .upsert({ chave: CONFIG_KEY, valor: urlWithTs, updated_at: new Date().toISOString() })

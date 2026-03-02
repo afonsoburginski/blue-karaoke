@@ -35,6 +35,25 @@ function CadastroMobileContent() {
   const [error, setError] = useState("")
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
 
+  const translateAuthError = (msg: string): string => {
+    const m = msg.toLowerCase()
+    if (m.includes("password") && (m.includes("short") || m.includes("length")))
+      return "A senha deve ter pelo menos 6 caracteres"
+    if (m.includes("already exists") || m.includes("já existe") || m.includes("email taken"))
+      return "Este email já está cadastrado. Faça login para continuar."
+    if (m.includes("invalid email")) return "Email inválido"
+    if (m.includes("invalid credentials") || m.includes("invalid password"))
+      return "Senha incorreta"
+    if (m.includes("user not found")) return "Usuário não encontrado"
+    return msg
+  }
+
+  const isFormValid =
+    formData.name.trim().length > 0 &&
+    formData.email.trim().length > 0 &&
+    formData.password.length >= 6 &&
+    formData.confirmPassword === formData.password
+
   // Buscar info do plano se veio com planId
   useState(() => {
     if (planId) {
@@ -114,12 +133,7 @@ function CadastroMobileContent() {
                       localStorage.setItem("userName", loginResponse.data.user.name || formData.name)
                       localStorage.setItem("userSlug", slug)
                     }
-                    // Se veio da página de preços com planId, redirecionar para preços com checkout
-                    if (planId && redirect === "checkout") {
-                      navigateFast(router, `/?planId=${planId}&checkout=true`)
-                    } else {
-                      navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
-                    }
+                    navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}${planId ? `&planId=${planId}` : ""}`)
                     return
                   } else {
                   // Se tiver assinatura, verificar role e redirecionar
@@ -199,13 +213,7 @@ function CadastroMobileContent() {
                 console.error("Erro ao verificar assinatura:", subErr)
               }
               
-              // Se não tiver assinatura ativa, redirecionar para checkout
-              // Se veio da página de preços com planId, redirecionar para preços com checkout
-              if (planId && redirect === "checkout") {
-                navigateFast(router, `/?planId=${planId}&checkout=true`)
-              } else {
-                navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}`)
-              }
+              navigateFast(router, `/checkout?userId=${loginResponse.data.user.id}&email=${encodeURIComponent(loginResponse.data.user.email)}${planId ? `&planId=${planId}` : ""}`)
               return
             }
           } catch (loginErr) {
@@ -219,7 +227,7 @@ function CadastroMobileContent() {
           
           return
         }
-        throw new Error(authError.message || "Erro ao criar conta")
+        throw new Error(translateAuthError(authError.message || "Erro ao criar conta"))
       }
 
       if (data?.user) {
@@ -232,16 +240,11 @@ function CadastroMobileContent() {
           localStorage.setItem("userSlug", slug)
         }
 
-        // Se veio da página de preços com planId, redirecionar para preços com checkout
-        if (planId && redirect === "checkout") {
-          navigateFast(router, `/?planId=${planId}&checkout=true`)
-        } else {
-          // Caso contrário, redirecionar para página de checkout
-          navigateFast(router, `/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}`)
-        }
+        navigateFast(router, `/checkout?userId=${data.user.id}&email=${encodeURIComponent(data.user.email)}${planId ? `&planId=${planId}` : ""}`)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao criar conta")
+      const msg = err instanceof Error ? err.message : "Erro ao criar conta"
+      setError(translateAuthError(msg))
     } finally {
       setIsLoading(false)
     }
@@ -368,16 +371,15 @@ function CadastroMobileContent() {
                   onChange={handleChange}
                   required
                   disabled={isLoading}
-                  minLength={6}
                   className="h-10"
                 />
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col space-y-3 px-4 pb-6">
+            <CardFooter className="flex flex-col space-y-3 px-4 pb-6 pt-5">
               <Button
                 type="submit"
                 className={`w-full h-10 ${isCheckoutFlow ? "bg-cyan-500 hover:bg-cyan-400 text-black font-semibold" : ""}`}
-                disabled={isLoading}
+                disabled={isLoading || !isFormValid}
               >
                 {isLoading
                   ? "Criando conta..."

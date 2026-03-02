@@ -40,7 +40,7 @@ export default function HistoricoPage() {
   const params = useParams()
   const { user, isLoading: authLoading } = useAuth()
   const queryClient = useQueryClient()
-  const [slug, setSlug] = useState<string | null>(null)
+  const slug = params?.slug as string | null
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("all")
   
   // Usar React Query para buscar histórico com cache
@@ -53,14 +53,6 @@ export default function HistoricoPage() {
   
   const history = historicoData?.historico || []
   const mostPlayed = historicoData?.maisTocadas || []
-
-  useEffect(() => {
-    async function unwrapParams() {
-      const { slug: slugValue } = await params
-      setSlug(slugValue as string)
-    }
-    unwrapParams()
-  }, [params])
 
   useEffect(() => {
     // Não fazer nada enquanto está carregando

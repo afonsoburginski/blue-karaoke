@@ -13,6 +13,7 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    minPasswordLength: 6,
     // Configurar bcrypt para compatibilidade com senhas existentes
     password: {
       hash: async (password: string) => {

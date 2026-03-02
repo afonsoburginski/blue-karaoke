@@ -2,11 +2,11 @@
 
 import { Suspense, useEffect, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { initMercadoPago, CardPayment } from "@mercadopago/sdk-react"
-import { CheckCircle2, Loader2, Info } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { CheckCircle2, Loader2 } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 import { createSlug } from "@/lib/slug"
 
@@ -24,6 +24,7 @@ function CheckoutContent() {
   const searchParams = useSearchParams()
   const userId = searchParams.get("userId")
   const userEmail = searchParams.get("email")
+  const planIdParam = searchParams.get("planId")
 
   const [plans, setPlans] = useState<Plan[]>([])
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
@@ -118,6 +119,14 @@ function CheckoutContent() {
       fetchPlans()
     }
   }, [userId, userEmail])
+
+  // Auto-selecionar plano quando vier da URL de cadastro
+  useEffect(() => {
+    if (!planIdParam || !plans.length || selectedPlan || !userId || !userEmail) return
+    const match = plans.find((p) => p.id === planIdParam)
+    if (match) handleSelectPlan(match)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plans, planIdParam, userId, userEmail])
 
   useEffect(() => {
     // Usar public key do ambiente (.env.local = TESTE, .env = PRODUÇÃO)
@@ -283,180 +292,181 @@ function CheckoutContent() {
   }
 
 
+  const isMobile = useIsMobile()
+
+  const bg = (
+    <div
+      className="absolute inset-0 bg-cover bg-no-repeat"
+      style={{ backgroundImage: `url('/images/karaoke-bg.jpg')`, backgroundPosition: "center center" }}
+    />
+  )
+
+  const stepIndicator = (
+    <div className={`flex items-center justify-center gap-${isMobile ? "2" : "3"} mb-2`}>
+      <div className="flex items-center gap-2">
+        <div className={`${isMobile ? "w-7 h-7 text-xs" : "w-8 h-8 text-sm"} rounded-full bg-white/20 text-white/50 font-bold flex items-center justify-center`}>
+          ✓
+        </div>
+        <span className={`text-white/50 font-medium ${isMobile ? "text-xs" : "text-sm"}`}>
+          {isMobile ? "Conta" : "Criar conta"}
+        </span>
+      </div>
+      <div className={`${isMobile ? "w-6" : "w-8"} h-px bg-white/30`} />
+      <div className="flex items-center gap-2">
+        <div className={`${isMobile ? "w-7 h-7 text-xs" : "w-8 h-8 text-sm"} rounded-full bg-cyan-500 text-black font-bold flex items-center justify-center`}>
+          2
+        </div>
+        <span className={`text-white font-medium ${isMobile ? "text-xs" : "text-sm"}`}>
+          Pagamento
+        </span>
+      </div>
+    </div>
+  )
+
   if (!userId || !userEmail) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-2xl">
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">Redirecionando...</p>
-          </CardContent>
-        </Card>
+      <main className="relative min-h-screen w-full overflow-hidden">
+        {bg}
+        <div className="relative z-10 flex min-h-screen items-center justify-center p-6">
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-6">
+              <p className="text-center text-muted-foreground">Redirecionando...</p>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     )
   }
 
   if (isSuccess) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-6 bg-gray-50">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
-              <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-500" />
-            </div>
-            <CardTitle className="text-2xl text-green-600 dark:text-green-500">
-              Pagamento aprovado!
-            </CardTitle>
-            <CardDescription className="mt-2">
-              Sua assinatura foi ativada com sucesso.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <Button
-              disabled
-              className="w-full"
-              size="lg"
-            >
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Redirecionando...
-            </Button>
-          </CardContent>
-        </Card>
+      <main className="relative min-h-screen w-full overflow-hidden">
+        {bg}
+        <div className="relative z-10 flex min-h-screen items-center justify-center p-6">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
+                <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-500" />
+              </div>
+              <CardTitle className="text-2xl text-green-600 dark:text-green-500">
+                Pagamento aprovado!
+              </CardTitle>
+              <CardDescription className="mt-2">
+                Sua assinatura foi ativada com sucesso.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <Button disabled className="w-full" size="lg">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Redirecionando...
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     )
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
-      <div className="w-full max-w-2xl space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-            Escolha seu plano
-          </h1>
-          <p className="text-sm text-gray-600">
-            Pagamento por cartão de crédito
-          </p>
-        </div>
+    <main className="relative min-h-screen w-full overflow-hidden">
+      {bg}
 
-        {isLoadingPlans ? (
-          <div className="text-center py-12">
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4" />
-            <p className="text-sm text-muted-foreground">Carregando planos...</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {plans.map((plan) => (
-              <Card
-                key={plan.id}
-                className={`cursor-pointer transition-all ${
-                  selectedPlan?.id === plan.id
-                    ? "ring-2 ring-primary border-primary"
-                    : "hover:border-primary/50"
-                }`}
-                onClick={() => !isLoading && handleSelectPlan(plan)}
-              >
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg mb-1">{plan.name}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">{plan.description}</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-bold">
-                          R$ {(plan.price / 100).toFixed(2).replace(".", ",")}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          /{plan.period === "mensal" ? "mês" : plan.period === "trimestral" ? "trimestre" : "ano"}
-                        </span>
+      <div className={`relative z-10 flex min-h-screen items-start justify-center ${isMobile ? "px-4 pt-10 pb-8" : "px-6 pt-12 pb-10"}`}>
+        <div className={`w-full ${isMobile ? "max-w-sm space-y-3" : "max-w-xl space-y-4"}`}>
+
+          {stepIndicator}
+
+          {isLoadingPlans ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-4" />
+                <p className="text-sm text-muted-foreground">Carregando planos...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {plans.map((plan) => (
+                <Card
+                  key={plan.id}
+                  className={`cursor-pointer transition-all ${
+                    selectedPlan?.id === plan.id
+                      ? "ring-2 ring-cyan-500 border-cyan-500"
+                      : "hover:border-primary/50"
+                  }`}
+                  onClick={() => !isLoading && handleSelectPlan(plan)}
+                >
+                  <CardContent className={isMobile ? "p-4" : "pt-5 pb-5 px-5"}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className={`font-semibold ${isMobile ? "text-base" : "text-lg"} mb-0.5`}>{plan.name}</h3>
+                        <p className="text-xs text-muted-foreground mb-1">{plan.description}</p>
+                        <div className="flex items-baseline gap-1">
+                          <span className={`font-bold ${isMobile ? "text-xl" : "text-2xl"}`}>
+                            R$ {(plan.price / 100).toFixed(2).replace(".", ",")}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            /{plan.period === "mensal" ? "mês" : plan.period === "trimestral" ? "trimestre" : "ano"}
+                          </span>
+                        </div>
                       </div>
+                      <Button
+                        variant={selectedPlan?.id === plan.id ? "default" : "outline"}
+                        disabled={isLoading}
+                        size="sm"
+                        className={selectedPlan?.id === plan.id ? "bg-cyan-500 hover:bg-cyan-400 text-black font-semibold" : ""}
+                      >
+                        {selectedPlan?.id === plan.id ? "Selecionado" : "Selecionar"}
+                      </Button>
                     </div>
-                    <Button
-                      variant={selectedPlan?.id === plan.id ? "default" : "outline"}
-                      disabled={isLoading}
-                      size="sm"
-                    >
-                      {selectedPlan?.id === plan.id ? "Selecionado" : "Selecionar"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
-        {error && (
-          <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive text-center">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive text-center">
+              {error}
+            </div>
+          )}
 
-        {selectedPlan && cardInitialization && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Finalizar pagamento</CardTitle>
-              <CardDescription>
-                {selectedPlan.name} - R$ {(selectedPlan.price / 100).toFixed(2).replace(".", ",")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {process.env.NEXT_PUBLIC_NODE_ENV === "development" && (
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertTitle>Modo de Teste - Cartões de Teste</AlertTitle>
-                  <AlertDescription className="mt-2">
-                    <div className="space-y-2 text-xs">
-                      <div className="font-semibold text-amber-600 dark:text-amber-400 mb-2">
-                        ⚠️ IMPORTANTE: Digite "APRO" no campo "Nome do portador" para aprovação em teste!
-                      </div>
-                      <div><strong>Mastercard:</strong> 5031 4332 1540 6351 | CVV: 123 | 11/30</div>
-                      <div><strong>Visa:</strong> 4235 6477 2802 5682 | CVV: 123 | 11/30</div>
-                      <div><strong>American Express:</strong> 3753 651535 56885 | CVV: 1234 | 11/30</div>
-                      <div><strong>Elo Débito:</strong> 5067 7667 8388 8311 | CVV: 123 | 11/30</div>
-                      <div className="mt-2 pt-2 border-t text-muted-foreground">
-                        <strong>Nome do portador:</strong> APRO (obrigatório para aprovação)
-                      </div>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              )}
-              <div className="min-h-[400px]">
-                <CardPayment
-                  initialization={cardInitialization}
-                  onSubmit={handleCardPayment}
-                  customization={{
-                    visual: {
-                      style: {
-                        theme: "default",
-                      },
-                    },
-                    paymentMethods: {
-                      types: {
-                        included: ["credit_card"],
-                      },
-                    },
-                  }}
-                  locale="pt-BR"
-                />
-              </div>
-
-              {isLoadingPayment && (
-                <div className="text-center py-8">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
-                  <p className="text-xs text-muted-foreground">
-                    Processando pagamento...
-                  </p>
+          {selectedPlan && cardInitialization && (
+            <Card>
+              <CardHeader className={isMobile ? "px-4 pt-4 pb-2" : ""}>
+                <CardTitle className="text-lg">Finalizar pagamento</CardTitle>
+                <CardDescription>
+                  {selectedPlan.name} — R$ {(selectedPlan.price / 100).toFixed(2).replace(".", ",")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className={`space-y-4 ${isMobile ? "px-4 pb-4" : ""}`}>
+                <div className="min-h-[400px]">
+                  <CardPayment
+                    initialization={cardInitialization}
+                    onSubmit={handleCardPayment}
+                    customization={{
+                      visual: { style: { theme: "default" } },
+                      paymentMethods: { types: { included: ["credit_card"] } },
+                    }}
+                    locale="pt-BR"
+                  />
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                {isLoadingPayment && (
+                  <div className="text-center py-6">
+                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
+                    <p className="text-xs text-muted-foreground">Processando pagamento...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-        {isLoading && !cardInitialization && (
-          <div className="text-center py-8">
-            <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
-            <p className="text-xs text-muted-foreground">
-              Preparando checkout...
-            </p>
-          </div>
-        )}
+          {isLoading && !cardInitialization && (
+            <div className="text-center py-8">
+              <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
+              <p className="text-xs text-muted-foreground">Preparando checkout...</p>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   )
@@ -465,12 +475,18 @@ function CheckoutContent() {
 export default function CheckoutPage() {
   return (
     <Suspense fallback={
-      <main className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Carregando...</CardTitle>
-          </CardHeader>
-        </Card>
+      <main className="relative min-h-screen w-full overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-no-repeat"
+          style={{ backgroundImage: `url('/images/karaoke-bg.jpg')`, backgroundPosition: "center center" }}
+        />
+        <div className="relative z-10 flex min-h-screen items-center justify-center p-6">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl">Carregando...</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
       </main>
     }>
       <CheckoutContent />

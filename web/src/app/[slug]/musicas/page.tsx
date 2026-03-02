@@ -552,12 +552,16 @@ export default function MusicasPage() {
       }
 
       try {
-        const formData = new FormData()
-        formData.append("file", file)
-        formData.append("codigo", codigo.trim())
-        formData.append("artista", artista.trim())
-        formData.append("titulo", titulo.trim())
+        // 1. Pedir signed URL ao servidor (arquivo não passa pelo Next.js)
+        const signRes = await fetch("/api/upload/sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: file.name, codigo: codigo.trim() }),
+        })
+        const signData = await signRes.json()
+        if (!signRes.ok) throw new Error(signData.error || "Erro ao gerar URL de upload")
 
+        // 2. Enviar arquivo diretamente ao Supabase Storage com XHR (progresso real)
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest()
           xhr.upload.addEventListener("progress", (event) => {
@@ -568,23 +572,35 @@ export default function MusicasPage() {
           })
           xhr.addEventListener("load", () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              successCount++
-              setUploadedFiles((prev) => new Set([...prev, i]))
               resolve()
             } else {
-              try {
-                const errorData = JSON.parse(xhr.responseText)
-                reject(new Error(errorData.error || "Erro ao fazer upload"))
-              } catch {
-                reject(new Error(`Erro ${xhr.status}: ${xhr.statusText}`))
-              }
+              reject(new Error(`Erro ao enviar arquivo (${xhr.status})`))
             }
           })
           xhr.addEventListener("error", () => reject(new Error("Erro de rede ao fazer upload")))
           xhr.addEventListener("abort", () => reject(new Error("Upload cancelado")))
-          xhr.open("POST", "/api/upload")
-          xhr.send(formData)
+          xhr.open("PUT", signData.signedUrl)
+          xhr.setRequestHeader("Content-Type", file.type || "video/mp4")
+          xhr.send(file)
         })
+
+        // 3. Confirmar no banco de dados
+        const confirmRes = await fetch("/api/upload/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: signData.path,
+            codigo: codigo.trim(),
+            artista: artista.trim(),
+            titulo: titulo.trim(),
+            size: file.size,
+          }),
+        })
+        const confirmData = await confirmRes.json()
+        if (!confirmRes.ok) throw new Error(confirmData.error || "Erro ao registrar música")
+
+        successCount++
+        setUploadedFiles((prev) => new Set([...prev, i]))
       } catch (error) {
         setErrors((prev) => ({
           ...prev,

@@ -59,12 +59,29 @@ export default function AparenciaPage() {
     setErrorMsg(null)
     setSuccessMsg(null)
     try {
-      const form = new FormData()
-      form.append("file", selectedFile)
-      const res = await fetch("/api/admin/banner", { method: "POST", body: form })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Erro ao enviar")
-      setCurrentUrl(data.url)
+      // 1. Obter signed URL (arquivo nunca passa pelo servidor Next.js)
+      const signRes = await fetch("/api/admin/banner/sign", { method: "POST" })
+      const signData = await signRes.json()
+      if (!signRes.ok) throw new Error(signData.error ?? "Erro ao gerar URL de upload")
+
+      // 2. Enviar arquivo diretamente ao Supabase Storage via PUT
+      const putRes = await fetch(signData.signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": selectedFile.type },
+        body: selectedFile,
+      })
+      if (!putRes.ok) throw new Error(`Erro ao enviar arquivo (${putRes.status})`)
+
+      // 3. Confirmar no banco de dados
+      const confirmRes = await fetch("/api/admin/banner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: signData.path }),
+      })
+      const confirmData = await confirmRes.json()
+      if (!confirmRes.ok) throw new Error(confirmData.error ?? "Erro ao confirmar banner")
+
+      setCurrentUrl(confirmData.url)
       setSelectedFile(null)
       setPreviewUrl(null)
       setSuccessMsg("Banner atualizado! O app desktop irá buscar a nova imagem automaticamente.")

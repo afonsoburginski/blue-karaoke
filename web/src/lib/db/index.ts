@@ -20,9 +20,10 @@ if (!DATABASE_URL) {
 // Criar conexão com o banco
 // Supabase pooler suporta até 200 conexões simultâneas
 const client = postgres(DATABASE_URL, {
-  max: process.env.NODE_ENV === "development" ? 1 : 15,
+  max: process.env.NODE_ENV === "development" ? 5 : 15,
   idle_timeout: 20,
   connect_timeout: 10,
+  prepare: false, // requerido pelo PgBouncer em transaction mode
 })
 
 // Criar instância do Drizzle

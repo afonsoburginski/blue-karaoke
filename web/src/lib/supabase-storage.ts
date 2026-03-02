@@ -62,36 +62,19 @@ export async function uploadToStorage(
 }
 
 /**
- * Uso do bucket "files" (soma do tamanho dos objetos na pasta musicas/).
+ * Uso do bucket: soma tamanho e conta registros diretamente no banco (O(1) com índice).
+ * Muito mais rápido do que listar objetos no Supabase Storage página a página.
  */
 export async function getStorageBucketUsage(): Promise<StorageUsage> {
-  const supabase = getSupabaseServer()
-  let totalBytes = 0
-  let totalObjects = 0
-  let offset = 0
-  const limit = 1000
-
-  while (true) {
-    const { data: files, error } = await supabase.storage
-      .from(BUCKET)
-      .list(MUSICAS_PREFIX, { limit, offset })
-
-    if (error) {
-      throw new Error(`Supabase Storage list failed: ${error.message}`)
-    }
-
-    if (!files?.length) break
-
-    for (const file of files) {
-      if (file.metadata?.size) {
-        totalBytes += Number(file.metadata.size)
-        totalObjects += 1
-      }
-    }
-
-    if (files.length < limit) break
-    offset += limit
-  }
+  // Import inline para evitar dependência circular com o módulo de db
+  const { postgresClient } = await import("@/lib/db")
+  const rows = await postgresClient`
+    SELECT COUNT(*)::int AS total_objects, COALESCE(SUM(tamanho), 0)::bigint AS total_bytes
+    FROM musicas
+  `
+  const row = rows[0] ?? { total_objects: 0, total_bytes: 0 }
+  const totalBytes = Number(row.total_bytes)
+  const totalObjects = Number(row.total_objects)
 
   return {
     totalBytes,
